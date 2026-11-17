@@ -7,11 +7,13 @@ import {
   ProjectionResult,
 } from '../types/tomography';
 import {
+  ANATOMICAL_CONTOURS,
   computePartialVolumeWeight,
   computeSingleProjection,
   isPointInPrimitive,
   TISSUE_SPECS,
 } from '../engine/radonEngine';
+import { MathFormula } from './MathFormula';
 
 interface ObjectGeometryWindowProps {
   primitives: PhantomPrimitive[];
@@ -49,7 +51,6 @@ export const ObjectGeometryWindow: React.FC<ObjectGeometryWindowProps> = ({
   const [dragOffset, setDragOffset] = useState<{ dx: number; dy: number }>({ dx: 0, dy: 0 });
   const [hoverCoordsMm, setHoverCoordsMm] = useState<{ x: number; y: number } | null>(null);
 
-  // Observe wrapper containers (never canvas elements) to prevent DPR resize feedback loops
   useEffect(() => {
     const mainEl = containerRef.current;
     const zEl = zSlabContainerRef.current;
@@ -73,7 +74,6 @@ export const ObjectGeometryWindow: React.FC<ObjectGeometryWindowProps> = ({
     return () => observer.disconnect();
   }, []);
 
-  // Convert canvas pixel coordinates to phantom mm coordinates [-135, +135]
   const canvasToMm = (clientX: number, clientY: number, canvas: HTMLCanvasElement) => {
     const rect = canvas.getBoundingClientRect();
     const cx = rect.width / 2;
@@ -124,7 +124,7 @@ export const ObjectGeometryWindow: React.FC<ObjectGeometryWindowProps> = ({
     }
   };
 
-  // Draw main 2D Gantry & Object Geometry Canvas
+  // Draw main 2D Gantry & Anatomical Object Geometry Canvas
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -142,7 +142,7 @@ export const ObjectGeometryWindow: React.FC<ObjectGeometryWindowProps> = ({
 
     const cx = width / 2;
     const cy = height / 2;
-    const scale = Math.min(width, height) / 275; // 1 mm -> pixels
+    const scale = Math.min(width, height) / 275;
 
     const mmToPxX = (xMm: number) => cx + xMm * scale;
     const mmToPxY = (yMm: number) => cy - yMm * scale;
@@ -179,16 +179,16 @@ export const ObjectGeometryWindow: React.FC<ObjectGeometryWindowProps> = ({
     ctx.lineTo(cx, mmToPxY(115));
     ctx.stroke();
 
-    // Axis degree labels
+    // Axis degree labels in clean sans-serif
     ctx.fillStyle = isDark ? '#64748B' : '#475569';
-    ctx.font = '500 10px "JetBrains Mono", monospace';
+    ctx.font = '600 10px "Plus Jakarta Sans", "DM Sans", sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('+X (0°)', mmToPxX(126), cy);
-    ctx.fillText('+Y (90°)', cx, mmToPxY(126));
-    ctx.fillText('-X (180°)', mmToPxX(-126), cy);
+    ctx.fillText('+x (0°)', mmToPxX(126), cy);
+    ctx.fillText('+y (90°)', cx, mmToPxY(126));
+    ctx.fillText('−x (180°)', mmToPxX(-126), cy);
 
-    // 3. Draw Phantom Primitives
+    // 3. Draw Phantom & Anatomical Primitives
     const sortedPrims = [...primitives]
       .filter((p) => p.visible)
       .sort((a, b) => b.radiusX * b.radiusY - a.radiusX * a.radiusY);
@@ -207,9 +207,9 @@ export const ObjectGeometryWindow: React.FC<ObjectGeometryWindowProps> = ({
 
       const huNorm = Math.max(0, Math.min(1, (prim.hu + 1000) / 2400));
       const lum = Math.round(18 + huNorm * 225);
-      const alpha = 0.25 + 0.7 * Math.max(0.15, pvWeight);
+      const alpha = 0.3 + 0.66 * Math.max(0.15, pvWeight);
 
-      ctx.fillStyle = `rgba(${lum}, ${lum}, ${Math.min(255, lum + 8)}, ${alpha.toFixed(2)})`;
+      ctx.fillStyle = `rgba(${lum}, ${lum}, ${Math.min(255, lum + 10)}, ${alpha.toFixed(2)})`;
       const isSelected = prim.id === selectedPrimitiveId;
       const spec = TISSUE_SPECS[prim.tissueType];
 
@@ -218,7 +218,7 @@ export const ObjectGeometryWindow: React.FC<ObjectGeometryWindowProps> = ({
         : pvWeight < 0.99
           ? '#38BDF8'
           : spec?.strokeHex || '#94A3B8';
-      ctx.lineWidth = isSelected ? 2.2 : 1.2;
+      ctx.lineWidth = isSelected ? 2.2 : 1.3;
 
       const rxPx = Math.max(2, prim.radiusX * scale);
       const ryPx = Math.max(2, prim.radiusY * scale);
@@ -226,11 +226,72 @@ export const ObjectGeometryWindow: React.FC<ObjectGeometryWindowProps> = ({
       ctx.beginPath();
       if (prim.shape === 'ellipse') {
         ctx.ellipse(0, 0, rxPx, ryPx, 0, 0, Math.PI * 2);
-      } else {
+      } else if (prim.shape === 'rectangle') {
         ctx.rect(-rxPx, -ryPx, rxPx * 2, ryPx * 2);
+      } else {
+        const contour = ANATOMICAL_CONTOURS[prim.shape];
+        if (contour && contour.length > 0) {
+          for (let i = 0; i < contour.length; i++) {
+            const px = contour[i][0] * rxPx;
+            const py = -contour[i][1] * ryPx; // flip Y so +Y is anterior (up)
+            if (i === 0) ctx.moveTo(px, py);
+            else ctx.lineTo(px, py);
+          }
+          ctx.closePath();
+        }
       }
       ctx.fill();
       ctx.stroke();
+
+      // Draw authentic internal anatomical details (bronchial/vascular trees, cerebral sulci, spinal canal)
+      if (prim.shape === 'lung_right' || prim.shape === 'lung_left') {
+        const sign = prim.shape === 'lung_right' ? -1 : 1;
+        ctx.strokeStyle = isDark ? 'rgba(56, 189, 248, 0.35)' : 'rgba(2, 132, 199, 0.4)';
+        ctx.lineWidth = 1;
+        // Oblique fissure & vascular tree branches from hilum
+        ctx.beginPath();
+        ctx.moveTo(sign * -0.25 * rxPx, 0);
+        ctx.quadraticCurveTo(sign * 0.25 * rxPx, -0.2 * ryPx, sign * 0.62 * rxPx, -0.58 * ryPx);
+        ctx.moveTo(sign * 0.1 * rxPx, -0.15 * ryPx);
+        ctx.lineTo(sign * 0.55 * rxPx, -0.18 * ryPx);
+        ctx.moveTo(sign * -0.25 * rxPx, 0);
+        ctx.quadraticCurveTo(sign * 0.28 * rxPx, 0.22 * ryPx, sign * 0.6 * rxPx, 0.56 * ryPx);
+        ctx.moveTo(sign * 0.15 * rxPx, 0.18 * ryPx);
+        ctx.lineTo(sign * 0.52 * rxPx, 0.25 * ryPx);
+        ctx.stroke();
+      } else if (prim.shape === 'brain_left' || prim.shape === 'brain_right') {
+        const sign = prim.shape === 'brain_left' ? -1 : 1;
+        ctx.strokeStyle = isDark ? 'rgba(148, 163, 184, 0.38)' : 'rgba(71, 85, 105, 0.38)';
+        ctx.lineWidth = 1;
+        // Cortical sulci infoldings
+        [-0.55, -0.25, 0.15, 0.48].forEach((yNorm, idx) => {
+          ctx.beginPath();
+          const xOuter = sign * (0.85 - Math.abs(yNorm) * 0.32) * rxPx;
+          const xInner = sign * (0.48 - (idx % 2) * 0.12) * rxPx;
+          ctx.moveTo(xOuter, yNorm * ryPx);
+          ctx.quadraticCurveTo(
+            (xOuter + xInner) * 0.5,
+            (yNorm + 0.06) * ryPx,
+            xInner,
+            (yNorm - 0.04) * ryPx
+          );
+          ctx.stroke();
+        });
+      } else if (prim.shape === 'vertebra') {
+        // Central spinal canal foramen inside the vertebra
+        ctx.fillStyle = isDark ? '#0F172A' : '#CBD5E1';
+        ctx.beginPath();
+        ctx.ellipse(0, 0.06 * ryPx, 0.22 * rxPx, 0.18 * ryPx, 0, 0, Math.PI * 2);
+        ctx.fill();
+      } else if (prim.shape === 'heart' && prim.tissueType === 'soft_tissue') {
+        // Subtle coronary sulcus & interventricular septum contour
+        ctx.strokeStyle = isDark ? 'rgba(248, 250, 252, 0.22)' : 'rgba(15, 23, 42, 0.2)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(-0.15 * rxPx, -0.55 * ryPx);
+        ctx.quadraticCurveTo(0.05 * rxPx, 0, 0.35 * rxPx, 0.55 * ryPx);
+        ctx.stroke();
+      }
 
       if (isSelected) {
         ctx.fillStyle = '#F59E0B';
@@ -457,11 +518,11 @@ export const ObjectGeometryWindow: React.FC<ObjectGeometryWindowProps> = ({
     ctx.stroke();
 
     ctx.fillStyle = isDark ? '#94A3B8' : '#475569';
-    ctx.font = '500 9px "JetBrains Mono", monospace';
+    ctx.font = '600 9.5px "Plus Jakarta Sans", "DM Sans", sans-serif';
     ctx.textAlign = 'left';
-    ctx.fillText('Z-SLAB', 6, 12);
+    ctx.fillText('Z-Slab', 6, 12);
     ctx.fillStyle = '#06B6D4';
-    ctx.fillText(`Δz=${params.sliceThicknessMm.toFixed(1)}`, 6, height - 6);
+    ctx.fillText(`Δz = ${params.sliceThicknessMm.toFixed(1)}`, 6, height - 6);
   }, [zSlabSize, primitives, params.sliceThicknessMm, params.sliceZOffsetMm, selectedPrimitiveId, isDark]);
 
   const selectedPrim = primitives.find((p) => p.id === selectedPrimitiveId);
@@ -479,10 +540,12 @@ export const ObjectGeometryWindow: React.FC<ObjectGeometryWindowProps> = ({
       {/* Window Header */}
       <div className="flex items-center justify-between px-3.5 py-2 border-b border-slate-200 dark:border-slate-800 shrink-0">
         <div className="min-w-0">
-          <div className="flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400 font-mono">
-            <span>WINDOW 01</span>
+          <div className="flex items-center gap-1.5 text-[11px] font-medium text-slate-500 dark:text-slate-400">
+            <span>Window 01</span>
             <span aria-hidden="true">·</span>
-            <span className="truncate">SPATIAL DOMAIN μ(x, y, z)</span>
+            <span className="truncate">
+              Spatial Domain <MathFormula tex="\mu(x, y, z)" />
+            </span>
           </div>
           <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
             Object &amp; Projection Geometry
@@ -504,7 +567,7 @@ export const ObjectGeometryWindow: React.FC<ObjectGeometryWindowProps> = ({
         </button>
       </div>
 
-      {/* Interactive 2D Gantry Canvas (absolute inside flex-1 container to prevent resize loops) */}
+      {/* Interactive 2D Gantry Canvas */}
       <div ref={containerRef} className="relative flex-1 min-h-0 w-full select-none overflow-hidden">
         <canvas
           ref={canvasRef}
@@ -516,37 +579,37 @@ export const ObjectGeometryWindow: React.FC<ObjectGeometryWindowProps> = ({
         />
 
         {/* Top-left live gantry telemetry overlay */}
-        <div className="pointer-events-none absolute top-2 left-2 flex flex-col gap-0.5 bg-white/85 dark:bg-[#0B0F19]/85 backdrop-blur-xs px-2 py-1 rounded-md border border-slate-200/80 dark:border-slate-800/80 text-[11px] font-mono">
-          <div className="text-slate-900 dark:text-slate-100 font-semibold">
-            θ = {params.currentAngleDeg.toFixed(1)}°
-            <span className="text-slate-400 dark:text-slate-500 mx-1">·</span>
-            <span className="text-cyan-600 dark:text-cyan-400 uppercase">{params.beamMode}</span>
+        <div className="pointer-events-none absolute top-2 left-2 flex flex-col gap-0.5 bg-white/85 dark:bg-[#0B0F19]/85 backdrop-blur-xs px-2.5 py-1 rounded-md border border-slate-200/80 dark:border-slate-800/80 text-xs tabular-nums">
+          <div className="text-slate-900 dark:text-slate-100 font-semibold flex items-center gap-1.5">
+            <MathFormula tex={`\\theta = ${params.currentAngleDeg.toFixed(1)}^\\circ`} />
+            <span className="text-slate-400 dark:text-slate-500">·</span>
+            <span className="text-cyan-600 dark:text-cyan-400 capitalize">{params.beamMode}-Beam</span>
           </div>
-          <div className="text-slate-500 dark:text-slate-400 text-[10px]">
+          <div className="text-slate-500 dark:text-slate-400 text-[11px]">
             {hoverCoordsMm
               ? `(${hoverCoordsMm.x} mm, ${hoverCoordsMm.y} mm)`
-              : 'Drag objects to reposition'}
+              : 'Drag any anatomical organ to reposition'}
           </div>
         </div>
 
         {/* Selected Primitive Mini Readout */}
         {selectedPrim && (
-          <div className="pointer-events-none absolute bottom-2 left-2 right-2 flex items-center justify-between gap-2 bg-white/90 dark:bg-[#0B0F19]/90 backdrop-blur-xs px-2.5 py-1 rounded-md border border-amber-500/40 text-[11px]">
+          <div className="pointer-events-none absolute bottom-2 left-2 right-2 flex items-center justify-between gap-2 bg-white/90 dark:bg-[#0B0F19]/90 backdrop-blur-xs px-2.5 py-1 rounded-md border border-amber-500/40 text-xs tabular-nums">
             <div className="flex items-center gap-1.5 truncate">
               <Move className="w-3 h-3 text-amber-500 shrink-0" />
               <span className="font-medium text-slate-900 dark:text-slate-100 truncate">
                 {selectedPrim.label}
               </span>
             </div>
-            <div className="flex items-center gap-1.5 font-mono text-[10px] text-slate-600 dark:text-slate-300 shrink-0">
+            <div className="flex items-center gap-1.5 text-[11px] text-slate-600 dark:text-slate-300 shrink-0">
               <span>
-                ({selectedPrim.centerX},{selectedPrim.centerY})
+                ({selectedPrim.centerX}, {selectedPrim.centerY}) mm
               </span>
               <span aria-hidden="true">·</span>
-              <span>{selectedPrim.hu}HU</span>
+              <span>{selectedPrim.hu} HU</span>
               <span aria-hidden="true">·</span>
-              <span className="text-cyan-600 dark:text-cyan-400">
-                PV:{Math.round((selectedPvWeight ?? 1) * 100)}%
+              <span className="text-cyan-600 dark:text-cyan-400 font-medium">
+                PV: {Math.round((selectedPvWeight ?? 1) * 100)}%
               </span>
             </div>
           </div>
@@ -555,14 +618,20 @@ export const ObjectGeometryWindow: React.FC<ObjectGeometryWindowProps> = ({
 
       {/* Companion Axial Slice Thickness (Z-Slab) Cross Section */}
       <div className="border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-[#080C14] px-3 py-1.5 shrink-0">
-        <div className="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400 mb-1">
+        <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 mb-1 tabular-nums">
           <span className="inline-flex items-center gap-1 font-medium text-slate-700 dark:text-slate-300">
             <Layers className="w-3 h-3 text-cyan-500" />
-            Axial Collimation (X–Z)
+            Axial Collimation (<MathFormula tex="x\text{--}z" /> Plane)
           </span>
-          <span className="font-mono">
-            Δz = {params.sliceThicknessMm.toFixed(1)} mm · z₀ ={' '}
-            {params.sliceZOffsetMm >= 0 ? `+${params.sliceZOffsetMm.toFixed(1)}` : params.sliceZOffsetMm.toFixed(1)} mm
+          <span>
+            <MathFormula tex={`\\Delta z = ${params.sliceThicknessMm.toFixed(1)}\\text{ mm}`} /> ·{' '}
+            <MathFormula
+              tex={`z_0 = ${
+                params.sliceZOffsetMm >= 0
+                  ? `+${params.sliceZOffsetMm.toFixed(1)}`
+                  : params.sliceZOffsetMm.toFixed(1)
+              }\\text{ mm}`}
+            />
           </span>
         </div>
         <div

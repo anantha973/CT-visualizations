@@ -6,6 +6,7 @@ import {
   ProbedSinogramPoint,
   ProjectionResult,
 } from '../types/tomography';
+import { MathFormula } from './MathFormula';
 
 interface CurrentProjectionWindowProps {
   params: AcquisitionParams;
@@ -36,7 +37,6 @@ export const CurrentProjectionWindow: React.FC<CurrentProjectionWindowProps> = (
 
   const selectedPrim = primitives.find((p) => p.id === selectedPrimitiveId && p.visible);
 
-  // Observe wrapper container size to prevent DPR resize feedback loops
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -106,10 +106,10 @@ export const CurrentProjectionWindow: React.FC<CurrentProjectionWindowProps> = (
     const valToY = (v: number) =>
       padTop + plotH - Math.min(1, Math.max(0, v / yMax)) * plotH;
 
-    // 2. Grid lines
+    // 2. Grid lines & clean sans-serif axis labels
     ctx.strokeStyle = isDark ? 'rgba(148, 163, 184, 0.12)' : 'rgba(100, 116, 139, 0.15)';
     ctx.lineWidth = 1;
-    ctx.font = '500 10px "JetBrains Mono", monospace';
+    ctx.font = '500 10.5px "Plus Jakarta Sans", "DM Sans", sans-serif';
     ctx.fillStyle = isDark ? '#64748B' : '#475569';
 
     const ySteps = 4;
@@ -144,17 +144,18 @@ export const CurrentProjectionWindow: React.FC<CurrentProjectionWindowProps> = (
 
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
-      ctx.fillText(`${sVal > 0 ? `+${sVal}` : sVal}`, x, padTop + plotH + 5);
+      ctx.fillText(`${sVal > 0 ? `+${sVal}` : sVal}`, x, padTop + plotH + 4);
     });
 
     ctx.textAlign = 'center';
     ctx.fillStyle = isDark ? '#94A3B8' : '#475569';
+    ctx.font = '500 10.5px "Plus Jakarta Sans", "DM Sans", sans-serif';
     ctx.fillText(
       params.beamMode === 'parallel'
-        ? 'Detector Position s (mm)'
-        : 'Fan Detector s (mm)',
+        ? 'Detector Coordinate s (mm)'
+        : 'Fan Detector Coordinate s (mm)',
       padLeft + plotW / 2,
-      height - 12
+      height - 11
     );
 
     // 3. Thin-Slice (0.5mm) Baseline Reference Curve
@@ -274,14 +275,14 @@ export const CurrentProjectionWindow: React.FC<CurrentProjectionWindowProps> = (
       {/* Window Header */}
       <div className="flex items-center justify-between gap-2 px-3.5 py-1.5 border-b border-slate-200 dark:border-slate-800 shrink-0">
         <div className="flex items-center gap-2 min-w-0">
-          <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400 shrink-0">
-            WINDOW 02 ·
+          <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 shrink-0">
+            Window 02 ·
           </span>
           <h2 className="text-xs sm:text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
-            Current Projection Profile pθ(s)
+            Current Projection <MathFormula tex="p_\theta(s)" />
           </h2>
-          <span className="text-[11px] font-mono text-cyan-600 dark:text-cyan-400 tabular-nums shrink-0">
-            (θ = {params.currentAngleDeg.toFixed(0)}°)
+          <span className="text-xs text-cyan-600 dark:text-cyan-400 tabular-nums shrink-0">
+            (<MathFormula tex={`\\theta = ${params.currentAngleDeg.toFixed(0)}^\\circ`} />)
           </span>
         </div>
 
@@ -297,7 +298,7 @@ export const CurrentProjectionWindow: React.FC<CurrentProjectionWindowProps> = (
             title="Compare current slice thickness against 0.5mm thin-slice reference"
           >
             <Layers className="w-3 h-3" />
-            <span>0.5mm Ref</span>
+            <span>0.5 mm Ref</span>
           </button>
           <button
             type="button"
@@ -307,10 +308,10 @@ export const CurrentProjectionWindow: React.FC<CurrentProjectionWindowProps> = (
                 ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30'
                 : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'
             }`}
-            title="Show isolated attenuation contribution of selected object"
+            title="Show isolated attenuation contribution of selected organ"
           >
             <Activity className="w-3 h-3" />
-            <span>Split</span>
+            <span>Organ Split</span>
           </button>
         </div>
       </div>
@@ -325,35 +326,35 @@ export const CurrentProjectionWindow: React.FC<CurrentProjectionWindowProps> = (
         />
 
         {/* Legend & Live Integral Readout */}
-        <div className="pointer-events-none absolute top-2 right-2 flex flex-col items-end gap-0.5 bg-white/85 dark:bg-[#0B0F19]/85 backdrop-blur-xs px-2 py-1 rounded-md border border-slate-200/80 dark:border-slate-800/80 text-[10px] font-mono">
+        <div className="pointer-events-none absolute top-2 right-2 flex flex-col items-end gap-0.5 bg-white/85 dark:bg-[#0B0F19]/85 backdrop-blur-xs px-2.5 py-1 rounded-md border border-slate-200/80 dark:border-slate-800/80 text-[11px] tabular-nums">
           <div className="flex items-center gap-2">
             <span className="text-cyan-600 dark:text-cyan-400 font-semibold">
-              Peak ∫μdl: {currentProjection.maxAttenuation.toFixed(2)}
+              Peak <MathFormula tex="\int \mu\,d\ell" />: {currentProjection.maxAttenuation.toFixed(2)}
             </span>
             <span className="text-slate-400">·</span>
             <span className="text-slate-600 dark:text-slate-300">
-              {params.detectorBins} bins
+              {params.detectorBins} channels
             </span>
           </div>
           {activeBinRay ? (
-            <div className="text-amber-600 dark:text-amber-400">
-              s={activeBinRay.sMm.toFixed(0)}mm → p={activeBinRay.attenuation.toFixed(3)}
+            <div className="text-amber-600 dark:text-amber-400 font-medium">
+              <MathFormula tex={`s = ${activeBinRay.sMm.toFixed(0)}\\text{ mm} \\implies p = ${activeBinRay.attenuation.toFixed(3)}`} />
             </div>
           ) : (
             <div className="text-slate-500 dark:text-slate-400">
-              Hover curve to trace ray
+              Hover waveform to trace single X-ray path
             </div>
           )}
         </div>
       </div>
 
       {/* Footer Mathematical Summary */}
-      <div className="border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-[#080C14] px-3.5 py-1.5 flex items-center justify-between gap-2 text-[11px] shrink-0">
-        <span className="font-mono text-cyan-600 dark:text-cyan-400 font-medium truncate">
-          pθ(s) = -ln(I/I₀) = ∫ μ dℓ → Sinogram Row θ = {params.currentAngleDeg.toFixed(0)}°
-        </span>
+      <div className="border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-[#080C14] px-3.5 py-1.5 flex items-center justify-between gap-2 text-xs shrink-0">
+        <div className="text-slate-700 dark:text-slate-300 truncate">
+          <MathFormula tex={`p_\\theta(s) = -\\ln(I / I_0) = \\int_{L(s,\\theta)} \\mu(x,y,z)\\,d\\ell \\;\\longrightarrow\\; \\text{Sinogram Row } \\theta = ${params.currentAngleDeg.toFixed(0)}^\\circ`} />
+        </div>
         {selectedPrim && showSelectedComponent && (
-          <span className="font-mono text-[10px] text-amber-600 dark:text-amber-400 truncate max-w-[180px] shrink-0">
+          <span className="text-[11px] font-medium text-amber-600 dark:text-amber-400 truncate max-w-[180px] shrink-0">
             Amber: {selectedPrim.label}
           </span>
         )}

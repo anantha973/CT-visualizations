@@ -7,6 +7,7 @@ import {
   TissueType,
 } from '../types/tomography';
 import { huToMu, PHANTOM_PRESETS, TISSUE_SPECS } from '../engine/radonEngine';
+import { MathFormula } from './MathFormula';
 
 interface PhantomEditorPanelProps {
   activePresetId: string;
@@ -19,6 +20,18 @@ interface PhantomEditorPanelProps {
   onAddPrimitive: (shape: PrimitiveShape) => void;
   onDeletePrimitive: (id: string) => void;
 }
+
+const SHAPE_LABELS: Record<PrimitiveShape, string> = {
+  heart: 'Anatomical Heart',
+  lung_right: 'Anatomical Right Lung',
+  lung_left: 'Anatomical Left Lung (Cardiac Notch)',
+  brain_left: 'Left Cerebral Hemisphere (Gyri)',
+  brain_right: 'Right Cerebral Hemisphere (Gyri)',
+  brain_ventricle: 'Butterfly Lateral Ventricles',
+  vertebra: 'Thoracic Vertebra (Spinous Process)',
+  ellipse: 'Elliptical Cylinder',
+  rectangle: 'Rectangular Bar',
+};
 
 export const PhantomEditorPanel: React.FC<PhantomEditorPanelProps> = ({
   activePresetId,
@@ -57,9 +70,9 @@ export const PhantomEditorPanel: React.FC<PhantomEditorPanelProps> = ({
       {/* Left 4 cols: Preset Selector & Pedagogical Context */}
       <div className="lg:col-span-4 flex flex-col justify-between gap-4 border-b lg:border-b-0 lg:border-r border-slate-200 dark:border-slate-800 pb-4 lg:pb-0 lg:pr-5">
         <div>
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-mono text-slate-500 dark:text-slate-400">
-              01. PHANTOM SELECTION
+          <div className="flex items-center justify-between mb-2.5">
+            <span className="text-xs font-semibold tracking-tight text-slate-600 dark:text-slate-300">
+              01. Anatomical &amp; Physics Phantoms
             </span>
             <button
               type="button"
@@ -67,7 +80,7 @@ export const PhantomEditorPanel: React.FC<PhantomEditorPanelProps> = ({
               className="inline-flex items-center gap-1 text-xs font-medium text-slate-600 dark:text-slate-300 hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors whitespace-nowrap shrink-0"
             >
               <RotateCcw className="w-3.5 h-3.5" />
-              <span>Reset Geometry</span>
+              <span>Reset Organ Positions</span>
             </button>
           </div>
 
@@ -87,8 +100,8 @@ export const PhantomEditorPanel: React.FC<PhantomEditorPanelProps> = ({
                 >
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-sm font-semibold">{preset.name}</span>
-                    <span className="text-[11px] font-mono text-cyan-600 dark:text-cyan-400 shrink-0">
-                      {preset.primitives.length} objs
+                    <span className="text-xs font-medium text-cyan-600 dark:text-cyan-400 tabular-nums shrink-0">
+                      {preset.primitives.length} structures
                     </span>
                   </div>
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 line-clamp-1">
@@ -103,7 +116,7 @@ export const PhantomEditorPanel: React.FC<PhantomEditorPanelProps> = ({
         {/* Clinical / Physics Takeaway Box */}
         <div className="bg-slate-50 dark:bg-[#0B0F19] border border-slate-200 dark:border-slate-800 rounded-lg p-3.5">
           <div className="text-xs font-semibold text-slate-900 dark:text-slate-100 mb-1">
-            Engineering Observation
+            Tomographic Observation
           </div>
           <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
             {activePreset.pedagogicalTakeaway}
@@ -111,28 +124,44 @@ export const PhantomEditorPanel: React.FC<PhantomEditorPanelProps> = ({
         </div>
       </div>
 
-      {/* Middle 3.5 cols: Object Layer List & Add Controls */}
+      {/* Middle 4 cols: Organ / Structure Layer List & Quick Add Controls */}
       <div className="lg:col-span-4 flex flex-col gap-3 border-b lg:border-b-0 lg:border-r border-slate-200 dark:border-slate-800 pb-4 lg:pb-0 lg:pr-5">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-mono text-slate-500 dark:text-slate-400">
-            02. INCLUSION STRUCTURES ({primitives.length})
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <span className="text-xs font-semibold tracking-tight text-slate-600 dark:text-slate-300">
+            02. Anatomical Structures ({primitives.length})
           </span>
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1 flex-wrap">
             <button
               type="button"
-              onClick={() => onAddPrimitive('ellipse')}
-              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium bg-cyan-600 text-white rounded-md hover:bg-cyan-500 transition-colors whitespace-nowrap shrink-0"
+              onClick={() => onAddPrimitive('heart')}
+              className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium bg-cyan-600 text-white rounded-md hover:bg-cyan-500 transition-colors whitespace-nowrap shrink-0"
             >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Add Ellipse</span>
+              <Plus className="w-3 h-3" />
+              <span>Heart</span>
             </button>
             <button
               type="button"
-              onClick={() => onAddPrimitive('rectangle')}
-              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200 rounded-md hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors whitespace-nowrap shrink-0"
+              onClick={() => onAddPrimitive('lung_left')}
+              className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200 rounded-md hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors whitespace-nowrap shrink-0"
             >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Add Bar</span>
+              <Plus className="w-3 h-3" />
+              <span>Lung</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onAddPrimitive('brain_left')}
+              className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200 rounded-md hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors whitespace-nowrap shrink-0"
+            >
+              <Plus className="w-3 h-3" />
+              <span>Brain</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onAddPrimitive('ellipse')}
+              className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200 rounded-md hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors whitespace-nowrap shrink-0"
+            >
+              <Plus className="w-3 h-3" />
+              <span>Lesion</span>
             </button>
           </div>
         </div>
@@ -154,12 +183,16 @@ export const PhantomEditorPanel: React.FC<PhantomEditorPanelProps> = ({
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-semibold truncate">{prim.label}</span>
                   </div>
-                  <div className="flex items-center gap-1.5 text-[11px] font-mono text-slate-500 dark:text-slate-400">
+                  <div className="flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400 tabular-nums">
                     <span>{prim.hu >= 0 ? `+${prim.hu}` : prim.hu} HU</span>
                     <span aria-hidden="true">·</span>
-                    <span>μ={prim.mu.toFixed(3)} cm⁻¹</span>
+                    <span>
+                      <MathFormula tex={`\\mu = ${prim.mu.toFixed(3)}\\text{ cm}^{-1}`} />
+                    </span>
                     <span aria-hidden="true">·</span>
-                    <span>dz={prim.zThicknessMm}mm</span>
+                    <span>
+                      <MathFormula tex={`dz = ${prim.zThicknessMm}\\text{ mm}`} />
+                    </span>
                   </div>
                 </div>
 
@@ -171,7 +204,7 @@ export const PhantomEditorPanel: React.FC<PhantomEditorPanelProps> = ({
                       onUpdatePrimitive(prim.id, { visible: !prim.visible });
                     }}
                     className="p-1.5 rounded text-slate-500 hover:text-slate-900 dark:hover:text-slate-100"
-                    title={prim.visible ? 'Hide Structure' : 'Show Structure'}
+                    title={prim.visible ? 'Hide Organ' : 'Show Organ'}
                   >
                     {prim.visible ? (
                       <Eye className="w-3.5 h-3.5" />
@@ -187,7 +220,7 @@ export const PhantomEditorPanel: React.FC<PhantomEditorPanelProps> = ({
                         onDeletePrimitive(prim.id);
                       }}
                       className="p-1.5 rounded text-slate-400 hover:text-rose-500 transition-colors"
-                      title="Delete Structure"
+                      title="Delete Organ"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
@@ -199,25 +232,25 @@ export const PhantomEditorPanel: React.FC<PhantomEditorPanelProps> = ({
         </div>
       </div>
 
-      {/* Right 4 cols: Selected Object Density (HU / μ) & Spatial Geometry Inspector */}
+      {/* Right 4 cols: Selected Organ Density (HU / μ) & Spatial Geometry Inspector */}
       <div className="lg:col-span-4 flex flex-col gap-3">
         <div className="flex items-center justify-between">
-          <span className="text-xs font-mono text-slate-500 dark:text-slate-400">
-            03. SELECTED OBJECT PARAMETERS
+          <span className="text-xs font-semibold tracking-tight text-slate-600 dark:text-slate-300">
+            03. Selected Organ Parameters
           </span>
           {selectedPrim && (
-            <span className="text-xs font-mono text-amber-600 dark:text-amber-400">
-              {selectedPrim.shape.toUpperCase()}
+            <span className="text-xs font-medium text-amber-600 dark:text-amber-400">
+              {SHAPE_LABELS[selectedPrim.shape]}
             </span>
           )}
         </div>
 
         {selectedPrim ? (
           <div className="flex flex-col gap-3">
-            <div className="grid grid-cols-2 gap-2.5">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
               <div>
                 <label className="block text-[11px] font-medium text-slate-600 dark:text-slate-400 mb-1">
-                  Structure Name
+                  Organ / Structure Name
                 </label>
                 <input
                   type="text"
@@ -231,14 +264,35 @@ export const PhantomEditorPanel: React.FC<PhantomEditorPanelProps> = ({
 
               <div>
                 <label className="block text-[11px] font-medium text-slate-600 dark:text-slate-400 mb-1">
-                  Tissue Material Preset
+                  Anatomical Contour
+                </label>
+                <select
+                  value={selectedPrim.shape}
+                  onChange={(e) =>
+                    onUpdatePrimitive(selectedPrim.id, {
+                      shape: e.target.value as PrimitiveShape,
+                    })
+                  }
+                  className="w-full px-2 py-1.5 text-xs rounded-md bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                >
+                  {Object.entries(SHAPE_LABELS).map(([shapeKey, label]) => (
+                    <option key={shapeKey} value={shapeKey}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-medium text-slate-600 dark:text-slate-400 mb-1">
+                  Tissue Material
                 </label>
                 <select
                   value={selectedPrim.tissueType}
                   onChange={(e) =>
                     handleTissueChange(selectedPrim.id, e.target.value as TissueType)
                   }
-                  className="w-full px-2.5 py-1.5 text-xs rounded-md bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                  className="w-full px-2 py-1.5 text-xs rounded-md bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-cyan-500"
                 >
                   {Object.values(TISSUE_SPECS).map((spec) => (
                     <option key={spec.id} value={spec.id}>
@@ -251,13 +305,13 @@ export const PhantomEditorPanel: React.FC<PhantomEditorPanelProps> = ({
 
             {/* Density / Hounsfield Unit Slider */}
             <div className="bg-slate-50 dark:bg-[#0B0F19] p-3 rounded-lg border border-slate-200 dark:border-slate-800">
-              <div className="flex items-center justify-between text-xs mb-1">
+              <div className="flex items-center justify-between text-xs mb-1 tabular-nums">
                 <span className="font-medium text-slate-700 dark:text-slate-300">
-                  Radiodensity &amp; Linear Attenuation (μ)
+                  Radiodensity &amp; Linear Attenuation (<MathFormula tex="\mu" />)
                 </span>
-                <span className="font-mono text-cyan-600 dark:text-cyan-400 font-semibold">
-                  {selectedPrim.hu >= 0 ? `+${selectedPrim.hu}` : selectedPrim.hu} HU · μ ={' '}
-                  {selectedPrim.mu.toFixed(3)} cm⁻¹
+                <span className="text-cyan-600 dark:text-cyan-400 font-semibold">
+                  {selectedPrim.hu >= 0 ? `+${selectedPrim.hu}` : selectedPrim.hu} HU ·{' '}
+                  <MathFormula tex={`\\mu = ${selectedPrim.mu.toFixed(3)}\\text{ cm}^{-1}`} />
                 </span>
               </div>
               <input
@@ -269,20 +323,22 @@ export const PhantomEditorPanel: React.FC<PhantomEditorPanelProps> = ({
                 onChange={(e) => handleHuChange(selectedPrim.id, Number(e.target.value))}
                 className="w-full accent-cyan-500"
               />
-              <div className="flex justify-between text-[10px] font-mono text-slate-400 mt-0.5">
-                <span>Air (-1000 HU)</span>
+              <div className="flex justify-between text-[11px] text-slate-400 mt-0.5 tabular-nums">
+                <span>Air (−1000 HU)</span>
                 <span>Water (0 HU)</span>
                 <span>Bone (+1000 HU)</span>
-                <span>Ti (+2400 HU)</span>
+                <span>Plaque (+2400 HU)</span>
               </div>
             </div>
 
             {/* Spatial & Axial Sliders */}
-            <div className="grid grid-cols-2 gap-x-3 gap-y-2.5">
+            <div className="grid grid-cols-2 gap-x-3 gap-y-2.5 tabular-nums">
               <div>
                 <div className="flex justify-between text-[11px] mb-0.5">
-                  <span className="text-slate-500 dark:text-slate-400">Center X₀</span>
-                  <span className="font-mono text-slate-800 dark:text-slate-200">
+                  <span className="text-slate-500 dark:text-slate-400">
+                    Center <MathFormula tex="x_0" />
+                  </span>
+                  <span className="font-medium text-slate-800 dark:text-slate-200">
                     {selectedPrim.centerX} mm
                   </span>
                 </div>
@@ -301,8 +357,10 @@ export const PhantomEditorPanel: React.FC<PhantomEditorPanelProps> = ({
 
               <div>
                 <div className="flex justify-between text-[11px] mb-0.5">
-                  <span className="text-slate-500 dark:text-slate-400">Center Y₀</span>
-                  <span className="font-mono text-slate-800 dark:text-slate-200">
+                  <span className="text-slate-500 dark:text-slate-400">
+                    Center <MathFormula tex="y_0" />
+                  </span>
+                  <span className="font-medium text-slate-800 dark:text-slate-200">
                     {selectedPrim.centerY} mm
                   </span>
                 </div>
@@ -321,8 +379,10 @@ export const PhantomEditorPanel: React.FC<PhantomEditorPanelProps> = ({
 
               <div>
                 <div className="flex justify-between text-[11px] mb-0.5">
-                  <span className="text-slate-500 dark:text-slate-400">Semi-Axis A (Width)</span>
-                  <span className="font-mono text-slate-800 dark:text-slate-200">
+                  <span className="text-slate-500 dark:text-slate-400">
+                    Width Scale (<MathFormula tex="a" />)
+                  </span>
+                  <span className="font-medium text-slate-800 dark:text-slate-200">
                     {selectedPrim.radiusX} mm
                   </span>
                 </div>
@@ -341,8 +401,10 @@ export const PhantomEditorPanel: React.FC<PhantomEditorPanelProps> = ({
 
               <div>
                 <div className="flex justify-between text-[11px] mb-0.5">
-                  <span className="text-slate-500 dark:text-slate-400">Semi-Axis B (Height)</span>
-                  <span className="font-mono text-slate-800 dark:text-slate-200">
+                  <span className="text-slate-500 dark:text-slate-400">
+                    Height Scale (<MathFormula tex="b" />)
+                  </span>
+                  <span className="font-medium text-slate-800 dark:text-slate-200">
                     {selectedPrim.radiusY} mm
                   </span>
                 </div>
@@ -361,8 +423,10 @@ export const PhantomEditorPanel: React.FC<PhantomEditorPanelProps> = ({
 
               <div>
                 <div className="flex justify-between text-[11px] mb-0.5">
-                  <span className="text-slate-500 dark:text-slate-400">In-Plane Tilt α</span>
-                  <span className="font-mono text-slate-800 dark:text-slate-200">
+                  <span className="text-slate-500 dark:text-slate-400">
+                    In-Plane Orientation (<MathFormula tex="\alpha" />)
+                  </span>
+                  <span className="font-medium text-slate-800 dark:text-slate-200">
                     {selectedPrim.tiltDeg}°
                   </span>
                 </div>
@@ -381,8 +445,10 @@ export const PhantomEditorPanel: React.FC<PhantomEditorPanelProps> = ({
 
               <div>
                 <div className="flex justify-between text-[11px] mb-0.5">
-                  <span className="text-slate-500 dark:text-slate-400">Axial Depth dz</span>
-                  <span className="font-mono text-cyan-600 dark:text-cyan-400">
+                  <span className="text-slate-500 dark:text-slate-400">
+                    Axial Slab Depth (<MathFormula tex="dz" />)
+                  </span>
+                  <span className="font-medium text-cyan-600 dark:text-cyan-400">
                     {selectedPrim.zThicknessMm.toFixed(1)} mm
                   </span>
                 </div>
@@ -405,7 +471,7 @@ export const PhantomEditorPanel: React.FC<PhantomEditorPanelProps> = ({
         ) : (
           <div className="flex flex-col items-center justify-center h-full text-center p-6 text-slate-500 text-xs">
             <Sliders className="w-6 h-6 mb-2 text-slate-400" />
-            Select any inclusion from the list or click directly inside Window 01 to edit its density and geometry.
+            Select any organ from the list or click directly inside Window 01 to edit its density and anatomical geometry.
           </div>
         )}
       </div>

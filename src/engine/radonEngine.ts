@@ -2,6 +2,7 @@ import {
   AcquisitionParams,
   PhantomPreset,
   PhantomPrimitive,
+  PrimitiveShape,
   ProjectionResult,
   RayGeometry,
   SinogramColormap,
@@ -29,178 +30,477 @@ export function muToHu(mu: number): number {
 export const TISSUE_SPECS: Record<TissueType, TissueSpec> = {
   air: {
     id: 'air',
-    label: 'Air Cavity',
+    label: 'Air / Bronchial Lumen',
     defaultHu: -1000,
     muCmInv: 0.0,
     fillHex: '#0f172a',
     strokeHex: '#475569',
-    description: 'Zero X-ray attenuation cavity (trachea, sinus, or background air)',
+    description: 'Zero X-ray attenuation cavity (trachea, paranasal sinus, or background air)',
   },
   lung: {
     id: 'lung',
     label: 'Lung Parenchyma',
-    defaultHu: -700,
-    muCmInv: huToMu(-700),
+    defaultHu: -720,
+    muCmInv: huToMu(-720),
     fillHex: '#1e3a5f',
     strokeHex: '#38bdf8',
-    description: 'Aerated pulmonary tissue with low linear attenuation',
+    description: 'Aerated pulmonary alveolar tissue with vascular branching',
   },
   adipose: {
     id: 'adipose',
-    label: 'Adipose (Fat)',
+    label: 'Adipose / Epicardial Fat',
     defaultHu: -90,
     muCmInv: huToMu(-90),
     fillHex: '#422006',
     strokeHex: '#f59e0b',
-    description: 'Subcutaneous or visceral lipid tissue slightly below water density',
+    description: 'Subcutaneous or pericardial lipid tissue slightly below water density',
   },
   water: {
     id: 'water',
-    label: 'Water Reference',
+    label: 'CSF / Water Reference',
     defaultHu: 0,
     muCmInv: MU_WATER_CM_INV,
     fillHex: '#1e293b',
     strokeHex: '#06b6d4',
-    description: 'Calibration standard (0 HU, μ = 0.192 cm⁻¹ at 70 keV)',
+    description: 'Cerebrospinal fluid & calibration standard (0 HU, μ = 0.192 cm⁻¹)',
   },
   soft_tissue: {
     id: 'soft_tissue',
-    label: 'Soft Tissue / Brain',
+    label: 'Myocardium / Brain Cortex',
     defaultHu: 45,
     muCmInv: huToMu(45),
     fillHex: '#334155',
     strokeHex: '#94a3b8',
-    description: 'Parenchymal organ, muscle, or cerebral gray/white matter',
+    description: 'Cardiac muscle, cerebral gray/white matter, or mediastinal tissue',
   },
   cancellous_bone: {
     id: 'cancellous_bone',
-    label: 'Trabecular Bone',
-    defaultHu: 350,
-    muCmInv: huToMu(350),
+    label: 'Contrast Blood / Trabecular',
+    defaultHu: 320,
+    muCmInv: huToMu(320),
     fillHex: '#78350f',
     strokeHex: '#fbbf24',
-    description: 'Spongy vertebral or medullary bone matrix',
+    description: 'Iodinated ventricular blood pool or spongy medullary bone matrix',
   },
   cortical_bone: {
     id: 'cortical_bone',
-    label: 'Cortical Bone',
+    label: 'Cortical Bone (Skull / Spine)',
     defaultHu: 1000,
     muCmInv: huToMu(1000),
     fillHex: '#e2e8f0',
     strokeHex: '#f8fafc',
-    description: 'Dense cranial calvarium or diaphyseal cortex (2× water attenuation)',
+    description: 'Dense cranial calvarium, vertebral body, or rib cortex',
   },
   titanium: {
     id: 'titanium',
-    label: 'Titanium / High-Z Pin',
-    defaultHu: 2200,
-    muCmInv: huToMu(2200),
+    label: 'Calcified Plaque / Titanium',
+    defaultHu: 2100,
+    muCmInv: huToMu(2100),
     fillHex: '#fef08a',
     strokeHex: '#eab308',
-    description: 'Metallic surgical implant or fiducial calibration wire',
+    description: 'Coronary artery calcification, pineal concretion, or metallic stent',
   },
 };
 
+/**
+ * Generates high-resolution, anatomically accurate normalized 2D polygon contours in [-1, 1] x [-1, 1]
+ * for genuine organ cross-sections (Heart, Right Lung, Left Lung with Cardiac Notch, Left/Right Cerebral
+ * Hemispheres with cortical gyri/sulci and Sylvian fissure, Butterfly Lateral Ventricles, and Thoracic Vertebra).
+ */
+function buildAnatomicalContours(): Record<
+  Exclude<PrimitiveShape, 'ellipse' | 'rectangle'>,
+  Array<[number, number]>
+> {
+  // 1. Anatomical Heart Contour (Axial 4-Chamber / Ventricular Apex Silhouette with AV groove indentations)
+  const heart: Array<[number, number]> = [];
+  const N = 72;
+  for (let i = 0; i < N; i++) {
+    const t = (i / N) * Math.PI * 2;
+    // Parametric anatomical axial cardiac contour:
+    // Bulges anterolaterally toward the left ventricular apex (+X, +Y),
+    // rounded right atrium (-X), flat posterior LA border (-Y), and gentle interventricular / AV grooves
+    const baseR =
+      0.82 +
+      0.16 * Math.cos(t - 0.65) - // Left ventricular apex prominence
+      0.08 * Math.cos(2 * (t + 0.4)) + // Ovoid elongation along cardiac axis
+      0.06 * Math.cos(3 * (t - 0.7)) - // Right atrial / RV outflow contour
+      0.035 * Math.cos(4 * (t - 0.2)); // Subtle AV sulcus indentation
+    const x = baseR * Math.cos(t) + 0.08 * Math.pow(Math.max(0, Math.sin(t)), 2);
+    const y = baseR * Math.sin(t) - 0.05 * Math.cos(2 * t);
+    heart.push([Math.max(-1, Math.min(1, x)), Math.max(-1, Math.min(1, y))]);
+  }
+
+  // 2. Anatomical Right Lung (In radiological CT convention, patient's Right Lung is on viewer's Left (-X):
+  // convex lateral costal wall on -X, flat/concave medial mediastinal wall on +X with hilar invagination)
+  const lung_right: Array<[number, number]> = [];
+  for (let i = 0; i < N; i++) {
+    const t = (i / N) * Math.PI * 2;
+    const cosT = Math.cos(t);
+    const sinT = Math.sin(t);
+    let x: number;
+    const y = 0.95 * sinT - 0.06 * Math.sin(2 * t);
+
+    if (cosT <= 0) {
+      // Lateral costal pleura (smooth rib-cage curve)
+      x = cosT * (0.96 + 0.06 * Math.sin(t));
+    } else {
+      // Medial mediastinal surface with hilar indentation around y = 0 and anterior/posterior rounding
+      const hilarNotch = 0.42 * Math.exp(-Math.pow(sinT / 0.36, 2));
+      const mediastinalFlat = 0.52 * cosT * (1 - hilarNotch);
+      x = mediastinalFlat - 0.12 * Math.exp(-Math.pow((sinT + 0.1) / 0.32, 2));
+    }
+    lung_right.push([x, y]);
+  }
+
+  // 3. Anatomical Left Lung (Viewer's Right (+X): convex lateral costal wall on +X,
+  // deep anteromedial Cardiac Notch on -X/+Y where the heart apex indents the left lung!)
+  const lung_left: Array<[number, number]> = [];
+  for (let i = 0; i < N; i++) {
+    const t = (i / N) * Math.PI * 2;
+    const cosT = Math.cos(t);
+    const sinT = Math.sin(t);
+    let x: number;
+    const y = 0.95 * sinT - 0.05 * Math.sin(2 * t);
+
+    if (cosT >= 0) {
+      // Lateral costal pleura
+      x = cosT * (0.96 + 0.05 * Math.sin(t));
+    } else {
+      // Medial mediastinal border with deep anterior Cardiac Notch (sinT > -0.15) + hilar indentation
+      const cardiacNotch = 0.65 * Math.exp(-Math.pow((sinT - 0.28) / 0.42, 2));
+      const hilarIndent = 0.35 * Math.exp(-Math.pow((sinT + 0.12) / 0.28, 2));
+      x = cosT * 0.54 * (1 - Math.max(cardiacNotch, hilarIndent)) + 0.22 * cardiacNotch;
+    }
+    lung_left.push([x, y]);
+  }
+
+  // 4. Anatomical Left Cerebral Hemisphere (Viewer's Left (-X) or Right: D-shaped hemisphere
+  // with flat medial longitudinal fissure, deep lateral Sylvian fissure, and cortical gyri/sulci undulations)
+  const brain_left: Array<[number, number]> = [];
+  const NB = 84;
+  for (let i = 0; i < NB; i++) {
+    const t = (i / NB) * Math.PI * 2;
+    const cosT = Math.cos(t);
+    const sinT = Math.sin(t);
+    const y = 0.96 * sinT;
+    let x: number;
+
+    if (cosT >= 0) {
+      // Flat medial interhemispheric fissure wall (falx cerebri) with slight central corpus callosum indentation
+      const callosalIndent = 0.16 * Math.exp(-Math.pow(sinT / 0.35, 2));
+      x = 0.12 * cosT - callosalIndent;
+    } else {
+      // Lateral convex pial surface with cortical gyri/sulci ripples + deep Sylvian fissure at sinT ≈ 0.1
+      const sylvianFissure = 0.26 * Math.exp(-Math.pow((sinT - 0.12) / 0.16, 2));
+      const gyriRipples = 0.045 * Math.cos(11 * t) + 0.025 * Math.sin(17 * t);
+      x = cosT * (0.95 - sylvianFissure + gyriRipples);
+    }
+    brain_left.push([x, y]);
+  }
+
+  // 5. Anatomical Right Cerebral Hemisphere (Mirror image of brain_left across X = 0)
+  const brain_right: Array<[number, number]> = brain_left
+    .map(([x, y]): [number, number] => [-x, y])
+    .reverse();
+
+  // 6. Butterfly-Shaped Cerebral Lateral Ventricles
+  const brain_ventricle: Array<[number, number]> = [];
+  for (let i = 0; i < N; i++) {
+    const t = (i / N) * Math.PI * 2;
+    const cosT = Math.cos(t);
+    const sinT = Math.sin(t);
+    // Twin anterior frontal horns & posterior trigones pinched at the midline septum pellucidum
+    const pinch = 1 - 0.62 * Math.exp(-Math.pow(cosT / 0.34, 2));
+    const wingFlare = 0.28 * Math.cos(2 * t);
+    const x = 0.92 * cosT * (1 + 0.15 * sinT * sinT);
+    const y = (0.78 * sinT * pinch + wingFlare * sinT) + 0.12 * cosT * cosT;
+    brain_ventricle.push([x, Math.max(-1, Math.min(1, y))]);
+  }
+
+  // 7. Anatomical Thoracic Vertebra (Anterior rounded vertebral body, bilateral transverse processes,
+  // posterior arch & sharp downward spinous process)
+  const vertebra: Array<[number, number]> = [];
+  for (let i = 0; i < NB; i++) {
+    const t = (i / NB) * Math.PI * 2;
+    // Angle t measured from +X: +Y (t=pi/2) is anterior vertebral body,
+    // t=0 and t=pi are lateral transverse processes, t=3pi/2 (-Y) is long posterior spinous process
+    const anteriorBody = 0.56 * Math.exp(-Math.pow(Math.atan2(Math.sin(t) - 1, Math.cos(t)) / 0.9, 2));
+    const rightTransverse = 0.48 * Math.exp(-Math.pow((t - 0.15) / 0.24, 2)) + 0.48 * Math.exp(-Math.pow((t - Math.PI * 2 - 0.15) / 0.24, 2));
+    const leftTransverse = 0.48 * Math.exp(-Math.pow((t - (Math.PI - 0.15)) / 0.24, 2));
+    const spinousProcess = 0.68 * Math.exp(-Math.pow((t - 1.5 * Math.PI) / 0.18, 2));
+    const r = Math.min(1.0, 0.36 + anteriorBody * 0.5 + rightTransverse + leftTransverse + spinousProcess);
+    vertebra.push([r * Math.cos(t), r * Math.sin(t)]);
+  }
+
+  return {
+    heart,
+    lung_right,
+    lung_left,
+    brain_left,
+    brain_right,
+    brain_ventricle,
+    vertebra,
+  };
+}
+
+export const ANATOMICAL_CONTOURS = buildAnatomicalContours();
+
 export const PHANTOM_PRESETS: PhantomPreset[] = [
   {
-    id: 'shepp-logan',
-    name: 'Shepp-Logan Head Phantom',
-    shortLabel: 'Shepp-Logan',
-    subtitle: 'Canonical cranial phantom with calvarium, ventricles & sub-slice lesions',
+    id: 'anatomical-thorax-heart-lungs',
+    name: 'Anatomical Thorax: Heart, Lungs & Spine',
+    shortLabel: 'Heart & Lungs (CT)',
+    subtitle: 'True anatomical right/left lungs with cardiac notch, 4-chamber heart, aorta & vertebra',
     description:
-      'Standard medical imaging benchmark consisting of a high-attenuation cortical skull ring, soft-tissue brain parenchyma, twin low-density fluid ventricles, and focal high-density lesions of varying axial slice thickness.',
+      'Authentic axial thoracic CT cross-section featuring anatomical Right and Left Lungs (with cardiac notch and hilar curvature), the oblique Heart with left/right ventricular chambers, descending thoracic aorta, sternum, rib cortex, and a realistic thoracic vertebra with spinous and transverse processes.',
     pedagogicalTakeaway:
-      'Observe how the thick outer cortical bone ring generates dominant twin edge peaks in pθ(s) across all angles, while internal ventricles and small focal tumors trace nested sinusoidal ribbons of contrasting amplitude and phase.',
+      'Observe how the large aerated Left and Right Lungs (-720 HU) carve deep asymmetric attenuation valleys on either side of the dense central Heart (+45 to +320 HU) and posterior Vertebral Column (+1000 HU).',
     primitives: [
       {
-        id: 'sl-skull',
-        label: 'Cortical Skull Calvarium',
-        shape: 'ellipse',
-        tissueType: 'cortical_bone',
-        hu: 1000,
-        mu: huToMu(1000),
-        centerX: 0,
-        centerY: 0,
-        radiusX: 69,
-        radiusY: 90,
-        tiltDeg: 0,
-        zCenterMm: 0,
-        zThicknessMm: 20,
-        visible: true,
-      },
-      {
-        id: 'sl-brain',
-        label: 'Cerebral Parenchyma',
+        id: 'ath-body-wall',
+        label: 'Thoracic Chest Wall',
         shape: 'ellipse',
         tissueType: 'soft_tissue',
-        hu: 45,
-        mu: huToMu(45),
+        hu: 40,
+        mu: huToMu(40),
         centerX: 0,
-        centerY: -1.8,
-        radiusX: 65,
-        radiusY: 85,
+        centerY: 0,
+        radiusX: 88,
+        radiusY: 64,
         tiltDeg: 0,
         zCenterMm: 0,
         zThicknessMm: 20,
         visible: true,
       },
       {
-        id: 'sl-ventricle-r',
-        label: 'Right Lateral Ventricle',
-        shape: 'ellipse',
+        id: 'ath-lung-right',
+        label: 'Right Lung (Anatomical 3-Lobe Contour)',
+        shape: 'lung_right',
         tissueType: 'lung',
-        hu: -350,
-        mu: huToMu(-350),
-        centerX: 22,
+        hu: -740,
+        mu: huToMu(-740),
+        centerX: -38,
+        centerY: 2,
+        radiusX: 36,
+        radiusY: 46,
+        tiltDeg: 4,
+        zCenterMm: 0,
+        zThicknessMm: 20,
+        visible: true,
+      },
+      {
+        id: 'ath-lung-left',
+        label: 'Left Lung (With Cardiac Notch)',
+        shape: 'lung_left',
+        tissueType: 'lung',
+        hu: -740,
+        mu: huToMu(-740),
+        centerX: 38,
         centerY: 0,
-        radiusX: 11,
-        radiusY: 31,
+        radiusX: 35,
+        radiusY: 45,
+        tiltDeg: -4,
+        zCenterMm: 0,
+        zThicknessMm: 20,
+        visible: true,
+      },
+      {
+        id: 'ath-heart-myocardium',
+        label: 'Heart (Myocardium & Pericardial Silhouette)',
+        shape: 'heart',
+        tissueType: 'soft_tissue',
+        hu: 55,
+        mu: huToMu(55),
+        centerX: 11,
+        centerY: 14,
+        radiusX: 28,
+        radiusY: 25,
+        tiltDeg: 28,
+        zCenterMm: 0,
+        zThicknessMm: 18,
+        visible: true,
+      },
+      {
+        id: 'ath-lv-chamber',
+        label: 'Left Ventricular Chamber (Contrast Blood)',
+        shape: 'heart',
+        tissueType: 'cancellous_bone',
+        hu: 310,
+        mu: huToMu(310),
+        centerX: 17,
+        centerY: 15,
+        radiusX: 13,
+        radiusY: 11,
+        tiltDeg: 28,
+        zCenterMm: 0,
+        zThicknessMm: 16,
+        visible: true,
+      },
+      {
+        id: 'ath-rv-chamber',
+        label: 'Right Ventricular Cavity',
+        shape: 'brain_ventricle',
+        tissueType: 'cancellous_bone',
+        hu: 260,
+        mu: huToMu(260),
+        centerX: 2,
+        centerY: 23,
+        radiusX: 12,
+        radiusY: 6.5,
         tiltDeg: -18,
         zCenterMm: 0,
         zThicknessMm: 16,
         visible: true,
       },
       {
-        id: 'sl-ventricle-l',
-        label: 'Left Lateral Ventricle',
+        id: 'ath-descending-aorta',
+        label: 'Descending Thoracic Aorta',
         shape: 'ellipse',
-        tissueType: 'lung',
-        hu: -350,
-        mu: huToMu(-350),
-        centerX: -22,
+        tissueType: 'cancellous_bone',
+        hu: 340,
+        mu: huToMu(340),
+        centerX: 12,
+        centerY: -18,
+        radiusX: 7.5,
+        radiusY: 7.5,
+        tiltDeg: 0,
+        zCenterMm: 0,
+        zThicknessMm: 20,
+        visible: true,
+      },
+      {
+        id: 'ath-vertebra',
+        label: 'Thoracic Vertebra (T7 Body & Spinous Process)',
+        shape: 'vertebra',
+        tissueType: 'cortical_bone',
+        hu: 1050,
+        mu: huToMu(1050),
+        centerX: 0,
+        centerY: -36,
+        radiusX: 24,
+        radiusY: 22,
+        tiltDeg: 0,
+        zCenterMm: 0,
+        zThicknessMm: 20,
+        visible: true,
+      },
+      {
+        id: 'ath-sternum',
+        label: 'Sternum Body (Cortical Bone)',
+        shape: 'rectangle',
+        tissueType: 'cortical_bone',
+        hu: 920,
+        mu: huToMu(920),
+        centerX: 0,
+        centerY: 54,
+        radiusX: 12,
+        radiusY: 4,
+        tiltDeg: 0,
+        zCenterMm: 0,
+        zThicknessMm: 18,
+        visible: true,
+      },
+    ],
+  },
+  {
+    id: 'anatomical-brain-ct',
+    name: 'Anatomical Brain CT: Cortex, Gyri & Ventricles',
+    shortLabel: 'Anatomical Brain',
+    subtitle: 'Left & Right cerebral hemispheres with cortical gyri, Sylvian fissure & butterfly ventricles',
+    description:
+      'Detailed cranial CT slice replacing simplified circles with folded Left and Right Cerebral Hemispheres (featuring cortical sulci/gyri and the lateral Sylvian fissure), butterfly-shaped Lateral Ventricles filled with CSF, deep Basal Ganglia / Thalami, and a calcified Pineal Gland.',
+    pedagogicalTakeaway:
+      'Compare the high-attenuation cranial calvarium (+1050 HU) with the folded cerebral hemispheres (+42 HU), CSF-filled butterfly ventricles (0 HU), and the sub-slice pineal gland calcification (+1600 HU).',
+    primitives: [
+      {
+        id: 'br-skull-outer',
+        label: 'Cranial Calvarium (Skull Bone)',
+        shape: 'ellipse',
+        tissueType: 'cortical_bone',
+        hu: 1080,
+        mu: huToMu(1080),
+        centerX: 0,
         centerY: 0,
-        radiusX: 15,
-        radiusY: 40,
-        tiltDeg: 18,
+        radiusX: 70,
+        radiusY: 88,
+        tiltDeg: 0,
+        zCenterMm: 0,
+        zThicknessMm: 20,
+        visible: true,
+      },
+      {
+        id: 'br-subarachnoid-csf',
+        label: 'Subarachnoid CSF Space',
+        shape: 'ellipse',
+        tissueType: 'water',
+        hu: 5,
+        mu: huToMu(5),
+        centerX: 0,
+        centerY: 0,
+        radiusX: 64,
+        radiusY: 82,
+        tiltDeg: 0,
+        zCenterMm: 0,
+        zThicknessMm: 20,
+        visible: true,
+      },
+      {
+        id: 'br-hemi-left',
+        label: 'Left Cerebral Hemisphere (Gyri & Sulci)',
+        shape: 'brain_left',
+        tissueType: 'soft_tissue',
+        hu: 45,
+        mu: huToMu(45),
+        centerX: -4,
+        centerY: 0,
+        radiusX: 59,
+        radiusY: 78,
+        tiltDeg: 0,
+        zCenterMm: 0,
+        zThicknessMm: 20,
+        visible: true,
+      },
+      {
+        id: 'br-hemi-right',
+        label: 'Right Cerebral Hemisphere (Gyri & Sulci)',
+        shape: 'brain_right',
+        tissueType: 'soft_tissue',
+        hu: 45,
+        mu: huToMu(45),
+        centerX: 4,
+        centerY: 0,
+        radiusX: 59,
+        radiusY: 78,
+        tiltDeg: 0,
+        zCenterMm: 0,
+        zThicknessMm: 20,
+        visible: true,
+      },
+      {
+        id: 'br-lateral-ventricles',
+        label: 'Butterfly Lateral Ventricles (CSF)',
+        shape: 'brain_ventricle',
+        tissueType: 'lung',
+        hu: -180,
+        mu: huToMu(-180),
+        centerX: 0,
+        centerY: 6,
+        radiusX: 26,
+        radiusY: 32,
+        tiltDeg: 0,
         zCenterMm: 0,
         zThicknessMm: 16,
         visible: true,
       },
       {
-        id: 'sl-anterior-mass',
-        label: 'Anterior Subdural Mass',
-        shape: 'ellipse',
-        tissueType: 'cancellous_bone',
-        hu: 320,
-        mu: huToMu(320),
-        centerX: 0,
-        centerY: 35,
-        radiusX: 20,
-        radiusY: 24,
-        tiltDeg: 0,
-        zCenterMm: 0,
-        zThicknessMm: 12,
-        visible: true,
-      },
-      {
-        id: 'sl-thin-calc',
-        label: 'Pineal Micro-Calcification (Thin Z)',
+        id: 'br-pineal-calc',
+        label: 'Pineal Gland Calcification (Thin Z = 2.5 mm)',
         shape: 'ellipse',
         tissueType: 'titanium',
-        hu: 1800,
-        mu: huToMu(1800),
+        hu: 1650,
+        mu: huToMu(1650),
         centerX: 0,
-        centerY: -12,
+        centerY: -18,
         radiusX: 5.5,
         radiusY: 5.5,
         tiltDeg: 0,
@@ -208,20 +508,112 @@ export const PHANTOM_PRESETS: PhantomPreset[] = [
         zThicknessMm: 2.5,
         visible: true,
       },
+    ],
+  },
+  {
+    id: 'anatomical-cardiac-ct',
+    name: 'Focused Cardiac CT: Chambers, Septum & Coronary Plaque',
+    shortLabel: 'Cardiac 4-Chamber',
+    subtitle: 'High-resolution anatomical heart phantom with LV/RV myocardium, blood pool & LAD calcification',
+    description:
+      'Dedicated cardiac CT angiography (CCTA) phantom isolating the oblique heart silhouette, thick Left Ventricular Myocardium, contrast-opacified Left and Right Ventricular chambers, Ascending Aorta, and a thin-slice Left Anterior Descending (LAD) coronary calcification.',
+    pedagogicalTakeaway:
+      'Watch how the dense LAD Coronary Calcification (+1900 HU, dz = 2 mm) traces a sharp high-intensity sinusoid over the broad cardiac chamber profile—and see how increasing Slice Thickness Δz blurs its contrast via Partial Volume Averaging.',
+    primitives: [
       {
-        id: 'sl-occipital-lesion',
-        label: 'Occipital Focal Lesion (Thin Z)',
+        id: 'card-pericardium',
+        label: 'Pericardial Sac & Epicardial Contour',
+        shape: 'heart',
+        tissueType: 'adipose',
+        hu: -65,
+        mu: huToMu(-65),
+        centerX: 0,
+        centerY: 0,
+        radiusX: 68,
+        radiusY: 60,
+        tiltDeg: 24,
+        zCenterMm: 0,
+        zThicknessMm: 20,
+        visible: true,
+      },
+      {
+        id: 'card-myocardium',
+        label: 'Ventricular Myocardium Wall',
+        shape: 'heart',
+        tissueType: 'soft_tissue',
+        hu: 60,
+        mu: huToMu(60),
+        centerX: 2,
+        centerY: 0,
+        radiusX: 60,
+        radiusY: 52,
+        tiltDeg: 24,
+        zCenterMm: 0,
+        zThicknessMm: 20,
+        visible: true,
+      },
+      {
+        id: 'card-lv-lumen',
+        label: 'Left Ventricle Blood Pool (Contrast)',
+        shape: 'heart',
+        tissueType: 'cancellous_bone',
+        hu: 380,
+        mu: huToMu(380),
+        centerX: 16,
+        centerY: 4,
+        radiusX: 28,
+        radiusY: 24,
+        tiltDeg: 24,
+        zCenterMm: 0,
+        zThicknessMm: 18,
+        visible: true,
+      },
+      {
+        id: 'card-rv-lumen',
+        label: 'Right Ventricle Crescent Chamber',
+        shape: 'brain_ventricle',
+        tissueType: 'cancellous_bone',
+        hu: 290,
+        mu: huToMu(290),
+        centerX: -18,
+        centerY: 16,
+        radiusX: 25,
+        radiusY: 14,
+        tiltDeg: -22,
+        zCenterMm: 0,
+        zThicknessMm: 18,
+        visible: true,
+      },
+      {
+        id: 'card-aorta-root',
+        label: 'Aortic Root (Outflow Tract)',
         shape: 'ellipse',
-        tissueType: 'cortical_bone',
-        hu: 850,
-        mu: huToMu(850),
-        centerX: -14,
-        centerY: -60,
-        radiusX: 8,
-        radiusY: 5,
+        tissueType: 'cancellous_bone',
+        hu: 410,
+        mu: huToMu(410),
+        centerX: -4,
+        centerY: -16,
+        radiusX: 14,
+        radiusY: 14,
         tiltDeg: 0,
-        zCenterMm: 2,
-        zThicknessMm: 3.0,
+        zCenterMm: 0,
+        zThicknessMm: 20,
+        visible: true,
+      },
+      {
+        id: 'card-lad-plaque',
+        label: 'LAD Coronary Calcified Plaque (dz = 2.0 mm)',
+        shape: 'ellipse',
+        tissueType: 'titanium',
+        hu: 1950,
+        mu: huToMu(1950),
+        centerX: 8,
+        centerY: 32,
+        radiusX: 5.5,
+        radiusY: 3.5,
+        tiltDeg: 35,
+        zCenterMm: 0,
+        zThicknessMm: 2.0,
         visible: true,
       },
     ],
@@ -303,120 +695,12 @@ export const PHANTOM_PRESETS: PhantomPreset[] = [
     ],
   },
   {
-    id: 'multi-density-calibration',
-    name: 'ACR Multi-Density Sensitometry Phantom',
-    shortLabel: 'ACR Density',
-    subtitle: 'Water bath with 5 sensitometry inserts spanning -1000 HU to +1000 HU',
-    description:
-      'Models a clinical quality-assurance CT sensitometry module used by medical systems engineers to verify Hounsfield Unit linearity across air, lung, adipose, trabecular bone, and cortical bone inserts.',
-    pedagogicalTakeaway:
-      'Compare how negative-HU inserts (Air -1000 HU, Lung -700 HU) carve attenuation valleys (shadow deficits) into the background water cylinder profile, while positive-HU bone rods produce sharp additive attenuation spikes.',
-    primitives: [
-      {
-        id: 'acr-bath',
-        label: 'Water-Equivalent Body Ring (0 HU)',
-        shape: 'ellipse',
-        tissueType: 'water',
-        hu: 0,
-        mu: huToMu(0),
-        centerX: 0,
-        centerY: 0,
-        radiusX: 82,
-        radiusY: 82,
-        tiltDeg: 0,
-        zCenterMm: 0,
-        zThicknessMm: 20,
-        visible: true,
-      },
-      {
-        id: 'acr-cortical',
-        label: 'Cortical Bone Insert (+1000 HU)',
-        shape: 'ellipse',
-        tissueType: 'cortical_bone',
-        hu: 1000,
-        mu: huToMu(1000),
-        centerX: 0,
-        centerY: 48,
-        radiusX: 13,
-        radiusY: 13,
-        tiltDeg: 0,
-        zCenterMm: 0,
-        zThicknessMm: 20,
-        visible: true,
-      },
-      {
-        id: 'acr-trabecular',
-        label: 'Trabecular Bone Insert (+350 HU)',
-        shape: 'ellipse',
-        tissueType: 'cancellous_bone',
-        hu: 350,
-        mu: huToMu(350),
-        centerX: 46,
-        centerY: 15,
-        radiusX: 13,
-        radiusY: 13,
-        tiltDeg: 0,
-        zCenterMm: 0,
-        zThicknessMm: 20,
-        visible: true,
-      },
-      {
-        id: 'acr-adipose',
-        label: 'Adipose Insert (-90 HU)',
-        shape: 'ellipse',
-        tissueType: 'adipose',
-        hu: -90,
-        mu: huToMu(-90),
-        centerX: 28,
-        centerY: -39,
-        radiusX: 13,
-        radiusY: 13,
-        tiltDeg: 0,
-        zCenterMm: 0,
-        zThicknessMm: 20,
-        visible: true,
-      },
-      {
-        id: 'acr-lung',
-        label: 'Lung Equivalent Insert (-700 HU)',
-        shape: 'ellipse',
-        tissueType: 'lung',
-        hu: -700,
-        mu: huToMu(-700),
-        centerX: -28,
-        centerY: -39,
-        radiusX: 13,
-        radiusY: 13,
-        tiltDeg: 0,
-        zCenterMm: 0,
-        zThicknessMm: 20,
-        visible: true,
-      },
-      {
-        id: 'acr-air',
-        label: 'Air Cavity Insert (-1000 HU)',
-        shape: 'ellipse',
-        tissueType: 'air',
-        hu: -1000,
-        mu: huToMu(-1000),
-        centerX: -46,
-        centerY: 15,
-        radiusX: 13,
-        radiusY: 13,
-        tiltDeg: 0,
-        zCenterMm: 0,
-        zThicknessMm: 20,
-        visible: true,
-      },
-    ],
-  },
-  {
     id: 'partial-volume-z-slab',
     name: 'Axial Slice Thickness & Partial Volume Phantom',
     shortLabel: 'Slice Thickness (Δz)',
     subtitle: 'Sub-millimeter and thin-slab high-Z discs at staggered axial z-depths',
     description:
-      'Designed specifically to teach the Partial Volume Artifact along the scanner z-axis. Contains four high-density discs with identical (x, y) diameter but axial thicknesses of 1.5 mm, 3.0 mm, 6.0 mm, and 20.0 mm.',
+      'Designed specifically to teach the Partial Volume Artifact along the scanner z-axis. Contains four high-density structures with axial thicknesses of 1.5 mm, 3.0 mm, 6.0 mm, and 20.0 mm.',
     pedagogicalTakeaway:
       'Increase the Slice Thickness (Δz) slider from 1 mm to 15 mm: the 20 mm full-depth rod maintains constant projection amplitude, while the 1.5 mm and 3.0 mm thin discs lose up to 85% of their apparent attenuation due to axial volume averaging.',
     primitives: [
@@ -502,114 +786,6 @@ export const PHANTOM_PRESETS: PhantomPreset[] = [
       },
     ],
   },
-  {
-    id: 'thorax-section',
-    name: 'Anatomical Thorax & Rectangular Bar Phantom',
-    shortLabel: 'Thorax & Shapes',
-    subtitle: 'Elliptical chest wall, aerated lungs, vertebral spine & rectangular bar target',
-    description:
-      'Combines elliptical and rectangular geometric primitives to demonstrate how anisotropic aspect ratios and flat edges produce sharp projection peaks when aligned parallel to the X-ray beam.',
-    pedagogicalTakeaway:
-      'Notice how the rectangular sternum/calibration bar produces a narrow, high-amplitude spike at θ = 0° (rays travelling along its long axis) and a wide, flat plateau at θ = 90° (rays perpendicular to its broad face).',
-    primitives: [
-      {
-        id: 'th-body',
-        label: 'Thoracic Body Wall',
-        shape: 'ellipse',
-        tissueType: 'soft_tissue',
-        hu: 45,
-        mu: huToMu(45),
-        centerX: 0,
-        centerY: 0,
-        radiusX: 88,
-        radiusY: 62,
-        tiltDeg: 0,
-        zCenterMm: 0,
-        zThicknessMm: 20,
-        visible: true,
-      },
-      {
-        id: 'th-lung-r',
-        label: 'Right Lung Field',
-        shape: 'ellipse',
-        tissueType: 'lung',
-        hu: -720,
-        mu: huToMu(-720),
-        centerX: -36,
-        centerY: 4,
-        radiusX: 30,
-        radiusY: 40,
-        tiltDeg: 10,
-        zCenterMm: 0,
-        zThicknessMm: 20,
-        visible: true,
-      },
-      {
-        id: 'th-lung-l',
-        label: 'Left Lung Field',
-        shape: 'ellipse',
-        tissueType: 'lung',
-        hu: -720,
-        mu: huToMu(-720),
-        centerX: 36,
-        centerY: 4,
-        radiusX: 28,
-        radiusY: 38,
-        tiltDeg: -10,
-        zCenterMm: 0,
-        zThicknessMm: 20,
-        visible: true,
-      },
-      {
-        id: 'th-heart',
-        label: 'Cardiac Mediastinum',
-        shape: 'ellipse',
-        tissueType: 'soft_tissue',
-        hu: 55,
-        mu: huToMu(55),
-        centerX: 8,
-        centerY: 12,
-        radiusX: 22,
-        radiusY: 26,
-        tiltDeg: -15,
-        zCenterMm: 0,
-        zThicknessMm: 18,
-        visible: true,
-      },
-      {
-        id: 'th-spine',
-        label: 'Thoracic Vertebral Body',
-        shape: 'ellipse',
-        tissueType: 'cortical_bone',
-        hu: 950,
-        mu: huToMu(950),
-        centerX: 0,
-        centerY: -36,
-        radiusX: 16,
-        radiusY: 14,
-        tiltDeg: 0,
-        zCenterMm: 0,
-        zThicknessMm: 20,
-        visible: true,
-      },
-      {
-        id: 'th-sternum-bar',
-        label: 'Rectangular Calibration Bar / Sternum',
-        shape: 'rectangle',
-        tissueType: 'titanium',
-        hu: 1650,
-        mu: huToMu(1650),
-        centerX: -34,
-        centerY: 10,
-        radiusX: 18,
-        radiusY: 4.5,
-        tiltDeg: 25,
-        zCenterMm: 0,
-        zThicknessMm: 10,
-        visible: true,
-      },
-    ],
-  },
 ];
 
 /**
@@ -640,7 +816,7 @@ export function computePartialVolumeWeight(
 
 /**
  * Exact 2D analytical chord intersection length (in mm) of a line segment (x1,y1)->(x2,y2)
- * with a rotated ellipse or rectangle.
+ * with a rotated ellipse, rectangle, or non-convex anatomical organ polygon contour.
  */
 export function computeRayPrimitiveChordMm(
   x1: number,
@@ -678,7 +854,6 @@ export function computeRayPrimitiveChordMm(
   const b = Math.max(0.5, prim.radiusY);
 
   if (prim.shape === 'ellipse') {
-    // Solve (lox + t*lux)^2 / a^2 + (loy + t*luy)^2 / b^2 = 1
     const A = (lux * lux) / (a * a) + (luy * luy) / (b * b);
     const B = 2 * ((lox * lux) / (a * a) + (loy * luy) / (b * b));
     const C = (lox * lox) / (a * a) + (loy * loy) / (b * b) - 1;
@@ -693,31 +868,98 @@ export function computeRayPrimitiveChordMm(
     const tEnter = Math.max(0, Math.min(t1, t2));
     const tExit = Math.min(rayLen, Math.max(t1, t2));
     return Math.max(0, tExit - tEnter);
-  } else {
-    // Slab intersection with box [-a, +a] x [-b, +b]
-    let tMin = 0;
-    let tMax = rayLen;
+  }
 
-    if (Math.abs(lux) < 1e-9) {
-      if (lox < -a || lox > a) return 0;
-    } else {
+  // Fast bounding-box check in [-a, +a] x [-b, +b]
+  let tMin = 0;
+  let tMax = rayLen;
+
+  if (Math.abs(lux) < 1e-9) {
+    if (lox < -a * 1.05 || lox > a * 1.05) return 0;
+  } else {
+    const tx1 = (-a * 1.05 - lox) / lux;
+    const tx2 = (a * 1.05 - lox) / lux;
+    tMin = Math.max(tMin, Math.min(tx1, tx2));
+    tMax = Math.min(tMax, Math.max(tx1, tx2));
+  }
+
+  if (Math.abs(luy) < 1e-9) {
+    if (loy < -b * 1.05 || loy > b * 1.05) return 0;
+  } else {
+    const ty1 = (-b * 1.05 - loy) / luy;
+    const ty2 = (b * 1.05 - loy) / luy;
+    tMin = Math.max(tMin, Math.min(ty1, ty2));
+    tMax = Math.min(tMax, Math.max(ty1, ty2));
+  }
+
+  if (tMax <= tMin) return 0;
+
+  if (prim.shape === 'rectangle') {
+    // Exact box [-a, +a] x [-b, +b]
+    let rMin = 0;
+    let rMax = rayLen;
+    if (Math.abs(lux) >= 1e-9) {
       const tx1 = (-a - lox) / lux;
       const tx2 = (a - lox) / lux;
-      tMin = Math.max(tMin, Math.min(tx1, tx2));
-      tMax = Math.min(tMax, Math.max(tx1, tx2));
+      rMin = Math.max(rMin, Math.min(tx1, tx2));
+      rMax = Math.min(rMax, Math.max(tx1, tx2));
+    } else if (Math.abs(lox) > a) {
+      return 0;
     }
-
-    if (Math.abs(luy) < 1e-9) {
-      if (loy < -b || loy > b) return 0;
-    } else {
+    if (Math.abs(luy) >= 1e-9) {
       const ty1 = (-b - loy) / luy;
       const ty2 = (b - loy) / luy;
-      tMin = Math.max(tMin, Math.min(ty1, ty2));
-      tMax = Math.min(tMax, Math.max(ty1, ty2));
+      rMin = Math.max(rMin, Math.min(ty1, ty2));
+      rMax = Math.min(rMax, Math.max(ty1, ty2));
+    } else if (Math.abs(loy) > b) {
+      return 0;
     }
-
-    return Math.max(0, tMax - tMin);
+    return Math.max(0, rMax - rMin);
   }
+
+  // Exact Ray-Polygon Intersection for Anatomical Organ Contours
+  const contour = ANATOMICAL_CONTOURS[prim.shape];
+  if (!contour || contour.length < 3) return 0;
+
+  const hits: number[] = [];
+  const nVerts = contour.length;
+
+  for (let i = 0; i < nVerts; i++) {
+    const p1 = contour[i];
+    const p2 = contour[(i + 1) % nVerts];
+
+    const xA = p1[0] * a;
+    const yA = p1[1] * b;
+    const ex = (p2[0] - p1[0]) * a;
+    const ey = (p2[1] - p1[1]) * b;
+
+    // Solve lox + t * lux = xA + s * ex, loy + t * luy = yA + s * ey
+    const det = lux * ey - luy * ex;
+    if (Math.abs(det) < 1e-10) continue;
+
+    const rx = xA - lox;
+    const ry = yA - loy;
+
+    const sEdge = (lux * ry - luy * rx) / det;
+    if (sEdge >= 0 && sEdge < 1) {
+      const tRay = (ex * ry - ey * rx) / det;
+      hits.push(tRay);
+    }
+  }
+
+  if (hits.length < 2) return 0;
+  hits.sort((u, v) => u - v);
+
+  let totalChordMm = 0;
+  for (let k = 0; k + 1 < hits.length; k += 2) {
+    const segStart = Math.max(0, hits[k]);
+    const segEnd = Math.min(rayLen, hits[k + 1]);
+    if (segEnd > segStart) {
+      totalChordMm += segEnd - segStart;
+    }
+  }
+
+  return totalChordMm;
 }
 
 /**
@@ -737,32 +979,49 @@ export function isPointInPrimitive(x: number, y: number, prim: PhantomPrimitive)
 
   if (prim.shape === 'ellipse') {
     return (lx * lx) / (a * a) + (ly * ly) / (b * b) <= 1;
-  } else {
+  }
+  if (prim.shape === 'rectangle') {
     return Math.abs(lx) <= a && Math.abs(ly) <= b;
   }
+
+  // Normalized coordinates (nx, ny) in [-1, 1]
+  const nx = lx / a;
+  const ny = ly / b;
+  if (Math.abs(nx) > 1.05 || Math.abs(ny) > 1.05) return false;
+
+  const contour = ANATOMICAL_CONTOURS[prim.shape];
+  if (!contour) return false;
+
+  let inside = false;
+  for (let i = 0, j = contour.length - 1; i < contour.length; j = i++) {
+    const xi = contour[i][0];
+    const yi = contour[i][1];
+    const xj = contour[j][0];
+    const yj = contour[j][1];
+    const intersect =
+      yi > ny !== yj > ny && nx < ((xj - xi) * (ny - yi)) / (yj - yi + 1e-12) + xi;
+    if (intersect) inside = !inside;
+  }
+  return inside;
 }
 
 /**
  * Computes the 1D projection profile p_theta(s) for a given gantry angle.
- * Note on nested structures (e.g. Lung inside Thorax or Air inside Water Bath):
- * If a smaller primitive is contained inside a larger host primitive, its effective
- * differential linear attenuation relative to the enclosing host is (mu_child - mu_host)
- * weighted by its axial partial volume, preventing unrealistic double-counting of background water/tissue!
  */
 export function computeSingleProjection(
   primitives: PhantomPrimitive[],
   params: AcquisitionParams,
   angleDeg: number
 ): ProjectionResult {
-  const fovRadiusMm = 100; // [-100mm, +100mm]
-  const gantryDistanceMm = 118; // Source/detector plane distance for parallel display
+  const fovRadiusMm = 100;
+  const gantryDistanceMm = 118;
   const thetaRad = (angleDeg * Math.PI) / 180;
   const cosT = Math.cos(thetaRad);
   const sinT = Math.sin(thetaRad);
 
   const visiblePrims = primitives.filter((p) => p.visible);
 
-  // Determine parent enclosing primitive for each primitive (by center containment and larger area)
+  // Determine parent enclosing primitive for each primitive so nested cavities/chambers replace background density accurately
   const effectiveMuDiffs = visiblePrims.map((prim, idx) => {
     const primArea = prim.radiusX * prim.radiusY;
     let smallestEnclosingParent: PhantomPrimitive | null = null;
@@ -806,7 +1065,6 @@ export function computeSingleProjection(
         smallestEnclosingParent.zCenterMm,
         smallestEnclosingParent.zThicknessMm
       );
-      // Within the child's axial overlap, it replaces the parent's mu with its own mu
       const netMu = prim.mu * pvWeight - smallestEnclosingParent.mu * Math.min(pvWeight, parentPvWeight);
       const netThinMu =
         prim.mu * thinPvWeight - smallestEnclosingParent.mu * Math.min(thinPvWeight, parentThinWeight);
@@ -832,7 +1090,6 @@ export function computeSingleProjection(
   let totalIntegralSum = 0;
 
   for (let k = 0; k < numBins; k++) {
-    // Normalized detector coordinate u in [-1, +1]
     const u = (2 * k) / (numBins - 1) - 1;
     const sMm = u * fovRadiusMm;
 
@@ -842,9 +1099,6 @@ export function computeSingleProjection(
     let y2: number;
 
     if (params.beamMode === 'parallel') {
-      // Parallel ray at offset sMm along detector axis (cosT, sinT),
-      // travelling from source plane (-gantryDistanceMm along normal (-sinT, cosT))
-      // to detector plane (+gantryDistanceMm along normal (-sinT, cosT))
       const dirX = -sinT;
       const dirY = cosT;
       x1 = sMm * cosT - gantryDistanceMm * dirX;
@@ -852,28 +1106,19 @@ export function computeSingleProjection(
       x2 = sMm * cosT + gantryDistanceMm * dirX;
       y2 = sMm * sinT + gantryDistanceMm * dirY;
     } else {
-      // Fan-Beam geometry:
-      // Focal spot is located at distance sourceIsoDistMm along the source normal:
-      // S = -D_SO * dir, where dir = (-sinT, cosT)
       const dirX = -sinT;
       const dirY = cosT;
       const dSo = Math.max(130, params.sourceIsoDistMm);
-      // Visual source position on gantry circle (clamped to gantry display radius for rendering,
-      // while using exact fan divergence angle gamma_k for ray tracing)
       const maxGammaRad = ((params.fanAngleDeg * Math.PI) / 180) * 0.5;
       const gamma = u * maxGammaRad;
 
-      // Ray angle in global coordinates
       const rayAngle = thetaRad + Math.PI / 2 + gamma;
       const rux = Math.cos(rayAngle);
       const ruy = Math.sin(rayAngle);
 
-      // Focal spot position
       const sx = -dSo * dirX;
       const sy = -dSo * dirY;
 
-      // Clip ray segment to the gantry circle of radius gantryDistanceMm for consistent visual & chord integration
-      // Since FOV is within radius 100mm and dSo >= 140mm, ray length 2 * dSo passes completely through the FOV
       const chordSpan = dSo + gantryDistanceMm;
       x1 = sx;
       y1 = sy;
@@ -888,14 +1133,13 @@ export function computeSingleProjection(
       const { prim, netMu, netThinMu, rawMu } = effectiveMuDiffs[i];
       const chordMm = computeRayPrimitiveChordMm(x1, y1, x2, y2, prim);
       if (chordMm > 0) {
-        const chordCm = chordMm / 10; // convert mm to cm since mu is in cm^-1
+        const chordCm = chordMm / 10;
         sumAtten += netMu * chordCm;
         sumThinAtten += netThinMu * chordCm;
         primitiveContributions[prim.id][k] = Math.max(0, rawMu * chordCm);
       }
     }
 
-    // Clamp numerical precision noise to >= 0
     const finalAtten = Math.max(0, sumAtten);
     const finalThinAtten = Math.max(0, sumThinAtten);
 
@@ -979,12 +1223,9 @@ export function computeTheoreticalSinusoidMm(
   const sinT = Math.sin(thetaRad);
 
   if (params.beamMode === 'parallel') {
-    // Classic Radon transform locus: s(θ) = x0 cos(θ) + y0 sin(θ)
     return x0 * cosT + y0 * sinT;
   } else {
-    // Fan-beam projection of point (x0, y0) from source at S = (dSo * sinT, -dSo * cosT)
     const dSo = Math.max(130, params.sourceIsoDistMm);
-    // Point coordinates in rotated gantry frame where u-axis is (cosT, sinT) and v-axis is (-sinT, cosT)
     const u = x0 * cosT + y0 * sinT;
     const v = -x0 * sinT + y0 * cosT;
     const gamma = Math.atan2(u, dSo + v);
@@ -1003,7 +1244,6 @@ export function mapSinogramColor(t: number, colormap: SinogramColormap): [number
     return [v, v, v];
   }
   if (colormap === 'clinical_cyan') {
-    // Deep obsidian -> cobalt -> cyan -> white
     if (c < 0.45) {
       const f = c / 0.45;
       return [Math.round(8 + f * 6), Math.round(14 + f * 118), Math.round(28 + f * 170)];
@@ -1016,7 +1256,6 @@ export function mapSinogramColor(t: number, colormap: SinogramColormap): [number
     }
   }
   if (colormap === 'viridis') {
-    // Approximate Viridis ramp
     const r = Math.round(255 * Math.min(1, Math.max(0, -0.35 + 1.45 * c * c)));
     const g = Math.round(255 * Math.min(1, Math.max(0, 0.05 + 0.9 * c)));
     const b = Math.round(
@@ -1024,7 +1263,6 @@ export function mapSinogramColor(t: number, colormap: SinogramColormap): [number
     );
     return [r, g, b];
   }
-  // Inferno ramp
   if (c < 0.33) {
     const f = c / 0.33;
     return [Math.round(10 + f * 110), Math.round(7 + f * 18), Math.round(35 + f * 95)];

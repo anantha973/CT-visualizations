@@ -8,6 +8,7 @@ import {
   SinogramMatrix,
 } from '../types/tomography';
 import { computeTheoreticalSinusoidMm, mapSinogramColor } from '../engine/radonEngine';
+import { MathFormula } from './MathFormula';
 
 interface SinogramWindowProps {
   params: AcquisitionParams;
@@ -50,7 +51,6 @@ export const SinogramWindow: React.FC<SinogramWindowProps> = ({
 
   const selectedPrim = primitives.find((p) => p.id === selectedPrimitiveId && p.visible);
 
-  // Observe wrapper container size to prevent DPR resize feedback loops
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -198,8 +198,8 @@ export const SinogramWindow: React.FC<SinogramWindowProps> = ({
     ctx.lineWidth = 1;
     ctx.strokeRect(padLeft, padTop, plotW, plotH);
 
-    // 3. Coordinate Axes & Tick Labels
-    ctx.font = '500 10px "JetBrains Mono", monospace';
+    // 3. Coordinate Axes & Tick Labels in clean sans-serif
+    ctx.font = '500 10.5px "Plus Jakarta Sans", "DM Sans", sans-serif';
     ctx.fillStyle = isDark ? '#64748B' : '#475569';
 
     const angleSteps = 4;
@@ -216,7 +216,7 @@ export const SinogramWindow: React.FC<SinogramWindowProps> = ({
       const x = padLeft + u * plotW;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
-      ctx.fillText(`${sVal > 0 ? `+${sVal}` : sVal}`, x, padTop + plotH + 5);
+      ctx.fillText(`${sVal > 0 ? `+${sVal}` : sVal}`, x, padTop + plotH + 4);
     });
 
     ctx.strokeStyle = 'rgba(148, 163, 184, 0.25)';
@@ -229,7 +229,7 @@ export const SinogramWindow: React.FC<SinogramWindowProps> = ({
 
     ctx.textAlign = 'center';
     ctx.fillStyle = isDark ? '#94A3B8' : '#475569';
-    ctx.fillText('Detector Position s (mm)', padLeft + plotW / 2, height - 12);
+    ctx.fillText('Detector Coordinate s (mm)', padLeft + plotW / 2, height - 11);
 
     // 4. Theoretical Sinusoidal Locus Curve
     if (showSinusoidLocus && selectedPrim) {
@@ -335,14 +335,14 @@ export const SinogramWindow: React.FC<SinogramWindowProps> = ({
       {/* Window Header */}
       <div className="flex items-center justify-between gap-2 px-3.5 py-1.5 border-b border-slate-200 dark:border-slate-800 shrink-0">
         <div className="flex items-center gap-2 min-w-0">
-          <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400 shrink-0">
-            WINDOW 03 ·
+          <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 shrink-0">
+            Window 03 ·
           </span>
           <h2 className="text-xs sm:text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
-            Sinogram Matrix R[μ](s, θ)
+            Sinogram Matrix <MathFormula tex="\mathcal{R}[\mu](s, \theta)" />
           </h2>
-          <span className="text-[11px] font-mono text-cyan-600 dark:text-cyan-400 shrink-0">
-            (0° → {params.maxAngleDeg}°)
+          <span className="text-xs text-cyan-600 dark:text-cyan-400 tabular-nums shrink-0">
+            (<MathFormula tex={`0^\\circ \\to ${params.maxAngleDeg}^\\circ`} />)
           </span>
         </div>
 
@@ -402,46 +402,51 @@ export const SinogramWindow: React.FC<SinogramWindowProps> = ({
         />
 
         {/* Top-Right Probe Status Overlay */}
-        <div className="pointer-events-none absolute top-2 right-2 flex flex-col items-end gap-0.5 bg-white/85 dark:bg-[#0B0F19]/85 backdrop-blur-xs px-2 py-1 rounded-md border border-slate-200/80 dark:border-slate-800/80 text-[10px] font-mono">
+        <div className="pointer-events-none absolute top-2 right-2 flex flex-col items-end gap-0.5 bg-white/85 dark:bg-[#0B0F19]/85 backdrop-blur-xs px-2.5 py-1 rounded-md border border-slate-200/80 dark:border-slate-800/80 text-[11px] tabular-nums">
           <div className="text-slate-700 dark:text-slate-200">
-            Scan:{' '}
+            Acquired:{' '}
             <span className="text-cyan-600 dark:text-cyan-400 font-semibold">
               {Math.round((maxAcquiredAngleDeg / params.maxAngleDeg) * 100)}%
             </span>{' '}
-            ({Math.min(sinogram.anglesDeg.length, Math.round(maxAcquiredAngleDeg / params.angularStepDeg) + 1)}/{sinogram.anglesDeg.length})
+            ({Math.min(sinogram.anglesDeg.length, Math.round(maxAcquiredAngleDeg / params.angularStepDeg) + 1)}/{sinogram.anglesDeg.length} views)
           </div>
           {probedPoint ? (
-            <div className="text-amber-600 dark:text-amber-400">
-              ({probedPoint.sMm.toFixed(0)}mm, {probedPoint.angleDeg.toFixed(0)}°) →{' '}
-              {probedPoint.attenuation.toFixed(2)}
+            <div className="text-amber-600 dark:text-amber-400 font-medium">
+              <MathFormula
+                tex={`(s=${probedPoint.sMm.toFixed(0)}\\text{ mm},\\; \\theta=${probedPoint.angleDeg.toFixed(0)}^\\circ) \\implies ${probedPoint.attenuation.toFixed(2)}`}
+              />
             </div>
           ) : (
             <div className="text-slate-500 dark:text-slate-400">
-              Click row to jump θ
+              Click any sinogram row to jump angle
             </div>
           )}
         </div>
       </div>
 
       {/* Footer Sinusoid Trajectory Formula */}
-      <div className="border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-[#080C14] px-3.5 py-1.5 flex items-center justify-between gap-2 text-[11px] shrink-0">
+      <div className="border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-[#080C14] px-3.5 py-1.5 flex items-center justify-between gap-2 text-xs shrink-0">
         {selectedPrim ? (
-          <div className="flex items-center gap-1.5 font-mono text-[10px] text-slate-600 dark:text-slate-300 truncate">
-            <span className="text-amber-600 dark:text-amber-400 font-semibold truncate">
-              s(θ) = {selectedPrim.centerX}cosθ + ({selectedPrim.centerY})sinθ
+          <div className="flex items-center gap-2 text-slate-700 dark:text-slate-300 truncate">
+            <span className="text-amber-600 dark:text-amber-400 font-medium truncate">
+              <MathFormula
+                tex={`s(\\theta) = ${selectedPrim.centerX}\\cos\\theta ${
+                  selectedPrim.centerY >= 0 ? `+ ${selectedPrim.centerY}` : `- ${Math.abs(selectedPrim.centerY)}`
+                }\\sin\\theta`}
+              />
             </span>
             <span aria-hidden="true">·</span>
             <span className="shrink-0">
-              r₀={r0Mm}, φ₀={phi0Deg}°
+              <MathFormula tex={`r_0 = ${r0Mm}\\text{ mm},\\; \\phi_0 = ${phi0Deg}^\\circ`} />
             </span>
           </div>
         ) : (
-          <div className="font-mono text-[10px] text-slate-500 dark:text-slate-400 truncate">
-            Select an object to show locus s(θ)
+          <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+            Select an organ in Window 01 to inspect its sinusoidal locus <MathFormula tex="s(\theta)" />
           </div>
         )}
-        <span className="font-mono text-[10px] text-cyan-600 dark:text-cyan-400 shrink-0">
-          {params.detectorBins}×{sinogram.anglesDeg.length}
+        <span className="text-[11px] font-medium text-cyan-600 dark:text-cyan-400 tabular-nums shrink-0">
+          {params.detectorBins} × {sinogram.anglesDeg.length}
         </span>
       </div>
     </section>

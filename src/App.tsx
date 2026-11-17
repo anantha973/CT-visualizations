@@ -28,9 +28,9 @@ import { CurrentProjectionWindow } from './components/CurrentProjectionWindow';
 import { SinogramWindow } from './components/SinogramWindow';
 import { PhantomEditorPanel } from './components/PhantomEditorPanel';
 import { RadonMathGuide } from './components/RadonMathGuide';
+import { MathFormula } from './components/MathFormula';
 
 export default function App() {
-  // Theme state (Light / Dark mode synced with <html class="dark">)
   const [isDark, setIsDark] = useState<boolean>(true);
 
   useEffect(() => {
@@ -42,13 +42,13 @@ export default function App() {
     }
   }, [isDark]);
 
-  // Active Phantom & Primitives State
+  // Default to the Anatomical Thorax (Heart, Lungs & Spine) preset
   const [activePresetId, setActivePresetId] = useState<string>(PHANTOM_PRESETS[0].id);
   const [primitives, setPrimitives] = useState<PhantomPrimitive[]>(() =>
     PHANTOM_PRESETS[0].primitives.map((p) => ({ ...p }))
   );
   const [selectedPrimitiveId, setSelectedPrimitiveId] = useState<string | null>(
-    PHANTOM_PRESETS[0].primitives[5]?.id || PHANTOM_PRESETS[0].primitives[0].id
+    PHANTOM_PRESETS[0].primitives[3]?.id || PHANTOM_PRESETS[0].primitives[0].id
   );
 
   // CT Acquisition & Gantry Geometry State
@@ -67,7 +67,6 @@ export default function App() {
   // Real-Time Animation & Progressive Sinogram Drawing State
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [playbackSpeed, setPlaybackSpeed] = useState<number>(1);
-  // Tracks how far the sinogram has been progressively drawn [0, maxAngleDeg]
   const [maxAcquiredAngleDeg, setMaxAcquiredAngleDeg] = useState<number>(180);
   const [showFullGhostSinogram, setShowFullGhostSinogram] = useState<boolean>(true);
   const [showSinusoidLocus, setShowSinusoidLocus] = useState<boolean>(true);
@@ -75,7 +74,6 @@ export default function App() {
   const [colormap, setColormap] = useState<SinogramColormap>('clinical_cyan');
   const [probedPoint, setProbedPoint] = useState<ProbedSinogramPoint | null>(null);
 
-  // Compute full sinogram matrix whenever primitives or physical geometry change
   const fullSinogram = useMemo(
     () => computeFullSinogram(primitives, params),
     [
@@ -91,7 +89,6 @@ export default function App() {
     ]
   );
 
-  // Compute instantaneous 1D projection at currentAngleDeg
   const currentProjection = useMemo(
     () => computeSingleProjection(primitives, params, params.currentAngleDeg),
     [primitives, params]
@@ -107,7 +104,7 @@ export default function App() {
     }
 
     let animId: number;
-    const baseDegreesPerSec = 36; // 36 deg/s at 1x speed (5 seconds for 180° sweep)
+    const baseDegreesPerSec = 36;
 
     const tick = (timestamp: number) => {
       if (lastFrameTimeRef.current === null) {
@@ -136,11 +133,12 @@ export default function App() {
     return () => cancelAnimationFrame(animId);
   }, [isPlaying, playbackSpeed]);
 
-  // Handler for Play / Pause button
   const handleTogglePlay = () => {
     if (!isPlaying) {
-      // If starting from the end of the sweep (or if full sinogram was already shown), start a fresh live scan from 0°!
-      if (params.currentAngleDeg >= params.maxAngleDeg - 1 || maxAcquiredAngleDeg >= params.maxAngleDeg) {
+      if (
+        params.currentAngleDeg >= params.maxAngleDeg - 1 ||
+        maxAcquiredAngleDeg >= params.maxAngleDeg
+      ) {
         setParams((prev) => ({ ...prev, currentAngleDeg: 0 }));
         setMaxAcquiredAngleDeg(0);
       }
@@ -150,7 +148,6 @@ export default function App() {
     }
   };
 
-  // Step forward / backward by angularStepDeg
   const handleStepAngle = (direction: -1 | 1) => {
     setIsPlaying(false);
     setParams((prev) => {
@@ -163,26 +160,23 @@ export default function App() {
     });
   };
 
-  // Reset scan to θ = 0° with clean sinogram canvas ready to draw
   const handleResetSweep = () => {
     setIsPlaying(false);
     setParams((prev) => ({ ...prev, currentAngleDeg: 0 }));
     setMaxAcquiredAngleDeg(0);
   };
 
-  // Complete full sinogram immediately
   const handleCompleteSinogram = () => {
     setIsPlaying(false);
     setMaxAcquiredAngleDeg(params.maxAngleDeg);
   };
 
-  // Select a preset phantom
   const handleSelectPreset = (preset: PhantomPreset) => {
     setIsPlaying(false);
     setActivePresetId(preset.id);
     const cloned = preset.primitives.map((p) => ({ ...p }));
     setPrimitives(cloned);
-    setSelectedPrimitiveId(cloned[cloned.length - 1]?.id || cloned[0]?.id || null);
+    setSelectedPrimitiveId(cloned[3]?.id || cloned[cloned.length - 1]?.id || cloned[0]?.id || null);
     setMaxAcquiredAngleDeg(params.maxAngleDeg);
     setProbedPoint(null);
   };
@@ -193,7 +187,6 @@ export default function App() {
     handleSelectPreset(preset);
   };
 
-  // Update a primitive's position from Window 1 drag-and-drop
   const handleUpdatePrimitivePosition = (
     id: string,
     centerX: number,
@@ -204,30 +197,43 @@ export default function App() {
     );
   };
 
-  // Update any property of a primitive from the Phantom Editor
   const handleUpdatePrimitive = (id: string, patch: Partial<PhantomPrimitive>) => {
     setPrimitives((prev) =>
       prev.map((p) => (p.id === id ? { ...p, ...patch } : p))
     );
   };
 
-  // Add a custom primitive inclusion
   const handleAddPrimitive = (shape: PrimitiveShape) => {
     const newId = `custom-${Date.now()}`;
+    const defaults: Record<
+      PrimitiveShape,
+      { label: string; tissueType: PhantomPrimitive['tissueType']; hu: number; rx: number; ry: number }
+    > = {
+      heart: { label: 'Anatomical Heart', tissueType: 'soft_tissue', hu: 55, rx: 26, ry: 23 },
+      lung_left: { label: 'Anatomical Left Lung', tissueType: 'lung', hu: -740, rx: 32, ry: 42 },
+      lung_right: { label: 'Anatomical Right Lung', tissueType: 'lung', hu: -740, rx: 32, ry: 42 },
+      brain_left: { label: 'Cerebral Hemisphere', tissueType: 'soft_tissue', hu: 45, rx: 45, ry: 60 },
+      brain_right: { label: 'Right Hemisphere', tissueType: 'soft_tissue', hu: 45, rx: 45, ry: 60 },
+      brain_ventricle: { label: 'Lateral Ventricles', tissueType: 'water', hu: 0, rx: 22, ry: 26 },
+      vertebra: { label: 'Thoracic Vertebra', tissueType: 'cortical_bone', hu: 1050, rx: 22, ry: 20 },
+      ellipse: { label: 'Calcified Lesion', tissueType: 'cortical_bone', hu: 950, rx: 10, ry: 10 },
+      rectangle: { label: 'Calibration Bar', tissueType: 'titanium', hu: 1600, rx: 18, ry: 5 },
+    };
+    const cfg = defaults[shape];
     const newPrim: PhantomPrimitive = {
       id: newId,
-      label: shape === 'ellipse' ? 'Custom High-Z Nodule' : 'Custom Calibration Bar',
+      label: cfg.label,
       shape,
-      tissueType: 'cortical_bone',
-      hu: 950,
-      mu: huToMu(950),
-      centerX: Math.round((Math.random() - 0.5) * 60),
-      centerY: Math.round((Math.random() - 0.5) * 60),
-      radiusX: shape === 'ellipse' ? 10 : 18,
-      radiusY: shape === 'ellipse' ? 10 : 5,
+      tissueType: cfg.tissueType,
+      hu: cfg.hu,
+      mu: huToMu(cfg.hu),
+      centerX: Math.round((Math.random() - 0.5) * 45),
+      centerY: Math.round((Math.random() - 0.5) * 45),
+      radiusX: cfg.rx,
+      radiusY: cfg.ry,
       tiltDeg: 0,
       zCenterMm: 0,
-      zThicknessMm: 12,
+      zThicknessMm: 14,
       visible: true,
     };
     setPrimitives((prev) => [...prev, newPrim]);
@@ -235,7 +241,6 @@ export default function App() {
     setMaxAcquiredAngleDeg(params.maxAngleDeg);
   };
 
-  // Delete a primitive
   const handleDeletePrimitive = (id: string) => {
     setPrimitives((prev) => {
       const filtered = prev.filter((p) => p.id !== id);
@@ -246,7 +251,6 @@ export default function App() {
     });
   };
 
-  // Probe a detector bin from Window 2
   const handleProbeBinFromWindow2 = (binIndex: number | null) => {
     if (binIndex === null) {
       if (!probedPoint?.locked) setProbedPoint(null);
@@ -265,7 +269,6 @@ export default function App() {
     });
   };
 
-  // Guided Classroom Lab Scenario Launcher
   const handleApplyLabScenario = (
     scenarioId: 'sinusoid' | 'partial_volume' | 'fan_vs_parallel' | 'anisotropy'
   ) => {
@@ -310,9 +313,9 @@ export default function App() {
       }));
       setMaxAcquiredAngleDeg(360);
     } else if (scenarioId === 'anisotropy') {
-      const preset = PHANTOM_PRESETS.find((p) => p.id === 'thorax-section')!;
+      const preset = PHANTOM_PRESETS.find((p) => p.id === 'anatomical-thorax-heart-lungs')!;
       handleSelectPreset(preset);
-      setSelectedPrimitiveId('th-sternum-bar');
+      setSelectedPrimitiveId('ath-heart-myocardium');
       setMaxAcquiredAngleDeg(params.maxAngleDeg);
     }
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -342,7 +345,7 @@ export default function App() {
             href="#phantom-studio"
             className="hover:text-slate-900 dark:hover:text-slate-100 transition-colors whitespace-nowrap shrink-0"
           >
-            Phantom Studio
+            Anatomical Studio
           </a>
           <a
             href="#math-reference"
@@ -393,8 +396,8 @@ export default function App() {
             <h1 className="text-lg sm:text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
               How Is a CT Sinogram Formed?
             </h1>
-            <span className="text-[11px] font-mono text-cyan-600 dark:text-cyan-400">
-              Module 01 · Radon Transform R[μ](s, θ)
+            <span className="text-xs font-medium text-cyan-600 dark:text-cyan-400">
+              Module 01 · Radon Transform <MathFormula tex="\mathcal{R}[\mu](s, \theta)" />
             </span>
           </div>
 
@@ -407,7 +410,7 @@ export default function App() {
                   key={preset.id}
                   type="button"
                   onClick={() => handleSelectPreset(preset)}
-                  className={`px-2.5 py-1 text-[11px] font-medium rounded-md transition-colors whitespace-nowrap shrink-0 ${
+                  className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors whitespace-nowrap shrink-0 ${
                     active
                       ? 'bg-white dark:bg-slate-800 text-cyan-600 dark:text-cyan-400 shadow-xs border border-slate-200/80 dark:border-slate-700'
                       : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
@@ -447,7 +450,7 @@ export default function App() {
                 )}
               </button>
 
-              <div className="flex items-center rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/70 p-0.5">
+              <div className="flex items-center rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/70 p-0.5 tabular-nums">
                 <button
                   type="button"
                   onClick={() => handleStepAngle(-1)}
@@ -456,8 +459,8 @@ export default function App() {
                 >
                   <ChevronLeft className="w-3.5 h-3.5" />
                 </button>
-                <span className="px-1.5 text-[11px] font-mono text-slate-700 dark:text-slate-200">
-                  ±{params.angularStepDeg}°
+                <span className="px-1.5 text-xs font-medium text-slate-700 dark:text-slate-200">
+                  <MathFormula tex={`\\pm ${params.angularStepDeg}^\\circ`} />
                 </span>
                 <button
                   type="button"
@@ -472,7 +475,7 @@ export default function App() {
               <button
                 type="button"
                 onClick={handleResetSweep}
-                className="inline-flex items-center gap-1 px-2 py-1.5 text-[11px] font-medium rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-600 transition-colors whitespace-nowrap shrink-0"
+                className="inline-flex items-center gap-1 px-2 py-1.5 text-xs font-medium rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-600 transition-colors whitespace-nowrap shrink-0"
                 title="Clear sinogram and reset gantry to 0°"
               >
                 <RotateCcw className="w-3 h-3" />
@@ -482,7 +485,7 @@ export default function App() {
               <button
                 type="button"
                 onClick={handleCompleteSinogram}
-                className="inline-flex items-center gap-1 px-2 py-1.5 text-[11px] font-medium rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-600 transition-colors whitespace-nowrap shrink-0"
+                className="inline-flex items-center gap-1 px-2 py-1.5 text-xs font-medium rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-600 transition-colors whitespace-nowrap shrink-0"
                 title="Fill entire sinogram immediately"
               >
                 <CheckCircle2 className="w-3 h-3 text-emerald-500" />
@@ -493,7 +496,7 @@ export default function App() {
                 aria-label="Playback Speed"
                 value={playbackSpeed}
                 onChange={(e) => setPlaybackSpeed(Number(e.target.value))}
-                className="px-2 py-1.5 text-[11px] font-mono rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200"
+                className="px-2 py-1.5 text-xs font-medium tabular-nums rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200"
               >
                 <option value={0.5}>0.5×</option>
                 <option value={1}>1.0×</option>
@@ -503,15 +506,15 @@ export default function App() {
             </div>
 
             {/* Primary Continuous Sliders: Projection Angle θ & Slice Thickness Δz (4 cols) */}
-            <div className="xl:col-span-4 grid grid-cols-1 sm:grid-cols-2 gap-3 border-b xl:border-b-0 xl:border-r border-slate-200 dark:border-slate-800 pb-2.5 xl:pb-0 xl:pr-3">
+            <div className="xl:col-span-4 grid grid-cols-1 sm:grid-cols-2 gap-3 border-b xl:border-b-0 xl:border-r border-slate-200 dark:border-slate-800 pb-2.5 xl:pb-0 xl:pr-3 tabular-nums">
               {/* Projection Angle Slider */}
               <div>
-                <div className="flex items-center justify-between text-[11px] mb-0.5">
+                <div className="flex items-center justify-between text-xs mb-0.5">
                   <span className="font-medium text-slate-700 dark:text-slate-300">
-                    Angle (θ)
+                    Angle (<MathFormula tex="\theta" />)
                   </span>
-                  <span className="font-mono font-semibold text-cyan-600 dark:text-cyan-400">
-                    {params.currentAngleDeg.toFixed(0)}° / {params.maxAngleDeg}°
+                  <span className="font-semibold text-cyan-600 dark:text-cyan-400">
+                    <MathFormula tex={`${params.currentAngleDeg.toFixed(0)}^\\circ / ${params.maxAngleDeg}^\\circ`} />
                   </span>
                 </div>
                 <input
@@ -532,11 +535,11 @@ export default function App() {
 
               {/* Axial Slice Thickness Δz Slider */}
               <div>
-                <div className="flex items-center justify-between text-[11px] mb-0.5">
+                <div className="flex items-center justify-between text-xs mb-0.5">
                   <span className="font-medium text-slate-700 dark:text-slate-300">
-                    Slice Δz
+                    Slice <MathFormula tex="\Delta z" />
                   </span>
-                  <span className="font-mono font-semibold text-cyan-600 dark:text-cyan-400">
+                  <span className="font-semibold text-cyan-600 dark:text-cyan-400">
                     {params.sliceThicknessMm.toFixed(1)} mm
                   </span>
                 </div>
@@ -558,13 +561,13 @@ export default function App() {
             </div>
 
             {/* Geometry & Resolution Controls (4 cols) */}
-            <div className="xl:col-span-4 flex flex-wrap items-center justify-between gap-1.5">
+            <div className="xl:col-span-4 flex flex-wrap items-center justify-between gap-1.5 tabular-nums">
               {/* Parallel vs Fan-Beam Segmented Toggle */}
               <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg border border-slate-200 dark:border-slate-700">
                 <button
                   type="button"
                   onClick={() => setParams((prev) => ({ ...prev, beamMode: 'parallel' }))}
-                  className={`px-2 py-1 text-[11px] font-medium rounded-md transition-colors whitespace-nowrap shrink-0 ${
+                  className={`px-2 py-1 text-xs font-medium rounded-md transition-colors whitespace-nowrap shrink-0 ${
                     params.beamMode === 'parallel'
                       ? 'bg-white dark:bg-slate-900 text-cyan-600 dark:text-cyan-400 shadow-2xs'
                       : 'text-slate-600 dark:text-slate-400'
@@ -575,7 +578,7 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => setParams((prev) => ({ ...prev, beamMode: 'fan' }))}
-                  className={`px-2 py-1 text-[11px] font-medium rounded-md transition-colors whitespace-nowrap shrink-0 ${
+                  className={`px-2 py-1 text-xs font-medium rounded-md transition-colors whitespace-nowrap shrink-0 ${
                     params.beamMode === 'fan'
                       ? 'bg-white dark:bg-slate-900 text-cyan-600 dark:text-cyan-400 shadow-2xs'
                       : 'text-slate-600 dark:text-slate-400'
@@ -599,7 +602,7 @@ export default function App() {
                       }));
                       setMaxAcquiredAngleDeg(range);
                     }}
-                    className={`px-2 py-1 text-[11px] font-mono rounded-md transition-colors whitespace-nowrap shrink-0 ${
+                    className={`px-2 py-1 text-xs font-medium rounded-md transition-colors whitespace-nowrap shrink-0 ${
                       params.maxAngleDeg === range
                         ? 'bg-white dark:bg-slate-900 text-cyan-600 dark:text-cyan-400 shadow-2xs'
                         : 'text-slate-600 dark:text-slate-400'
@@ -620,13 +623,13 @@ export default function App() {
                     angularStepDeg: Number(e.target.value) as 1 | 2 | 3 | 5,
                   }))
                 }
-                className="px-1.5 py-1 text-[11px] font-mono rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200"
+                className="px-1.5 py-1 text-xs font-medium rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200"
                 title="Angular Step Size (Δθ)"
               >
-                <option value={1}>Δθ=1°</option>
-                <option value={2}>Δθ=2°</option>
-                <option value={3}>Δθ=3°</option>
-                <option value={5}>Δθ=5°</option>
+                <option value={1}>Step 1°</option>
+                <option value={2}>Step 2°</option>
+                <option value={3}>Step 3°</option>
+                <option value={5}>Step 5°</option>
               </select>
 
               {/* Detector Bins Selector */}
@@ -639,7 +642,7 @@ export default function App() {
                     detectorBins: Number(e.target.value) as 64 | 128 | 192 | 256,
                   }))
                 }
-                className="px-1.5 py-1 text-[11px] font-mono rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200"
+                className="px-1.5 py-1 text-xs font-medium rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200"
                 title="Number of Detector Channels (Ns)"
               >
                 <option value={64}>64 bins</option>
@@ -712,15 +715,15 @@ export default function App() {
           </div>
         </div>
 
-        {/* Custom Phantom & Object Density Studio */}
+        {/* Custom Phantom & Organ Density Studio */}
         <section id="phantom-studio" className="space-y-3 pt-2">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-xs font-mono text-slate-500 dark:text-slate-400">
-                INTERACTIVE PHANTOM STUDIO · HOUNSFIELD UNIT &amp; GEOMETRY BUILDER
+              <div className="text-xs font-semibold text-cyan-600 dark:text-cyan-400">
+                Interactive Anatomical Studio · Hounsfield Unit &amp; Organ Builder
               </div>
               <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">
-                Phantom Presets &amp; Custom Inclusion Inspector
+                Anatomical CT Phantoms &amp; Custom Organ Inspector
               </h2>
             </div>
           </div>

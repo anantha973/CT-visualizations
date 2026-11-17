@@ -19,7 +19,16 @@ export interface TissueSpec {
   description: string;
 }
 
-export type PrimitiveShape = 'ellipse' | 'rectangle';
+export type PrimitiveShape =
+  | 'ellipse'
+  | 'rectangle'
+  | 'heart'
+  | 'lung_right'
+  | 'lung_left'
+  | 'brain_left'
+  | 'brain_right'
+  | 'brain_ventricle'
+  | 'vertebra';
 
 export interface PhantomPrimitive {
   id: string;
@@ -44,7 +53,7 @@ export interface PhantomPrimitive {
   zCenterMm: number;
   /** Axial z-thickness (slab height) in mm (0.5 to 25) */
   zThicknessMm: number;
-  /** Whether this structure's attenuation adds/subtracts relative to background or sets absolute tissue density */
+  /** Whether this structure's attenuation is active */
   visible: boolean;
 }
 
