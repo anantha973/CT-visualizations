@@ -1,0 +1,6 @@
+{
+  "name": "RadonLab — CT Sinogram & Radon Transform Workbench",
+  "description": "Interactive Master's-level Computed Tomography simulation workbench for medical systems engineers exploring sinogram formation, Radon transform mathematics, parallel vs. fan-beam geometry, and axial slice thickness partial-volume physics.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
