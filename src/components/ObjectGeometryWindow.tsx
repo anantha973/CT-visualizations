@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Crosshair, Eye, Layers, Move } from 'lucide-react';
+import { Eye, Layers, Move } from 'lucide-react';
 import {
   AcquisitionParams,
   PhantomPrimitive,
@@ -38,20 +38,47 @@ export const ObjectGeometryWindow: React.FC<ObjectGeometryWindowProps> = ({
   showRayLines,
   onToggleRayLines,
 }) => {
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const zSlabContainerRef = useRef<HTMLDivElement | null>(null);
   const zSlabCanvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  const [canvasSize, setCanvasSize] = useState<{ w: number; h: number }>({ w: 400, h: 300 });
+  const [zSlabSize, setZSlabSize] = useState<{ w: number; h: number }>({ w: 400, h: 52 });
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dragOffset, setDragOffset] = useState<{ dx: number; dy: number }>({ dx: 0, dy: 0 });
   const [hoverCoordsMm, setHoverCoordsMm] = useState<{ x: number; y: number } | null>(null);
 
+  // Observe wrapper containers (never canvas elements) to prevent DPR resize feedback loops
+  useEffect(() => {
+    const mainEl = containerRef.current;
+    const zEl = zSlabContainerRef.current;
+    if (!mainEl && !zEl) return;
+
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect;
+        if (entry.target === mainEl && width > 0 && height > 0) {
+          setCanvasSize({ w: Math.floor(width), h: Math.floor(height) });
+        } else if (entry.target === zEl && width > 0 && height > 0) {
+          setZSlabSize({ w: Math.floor(width), h: Math.floor(height) });
+        }
+      }
+    });
+
+    if (mainEl) observer.observe(mainEl);
+    if (zEl) observer.observe(zEl);
+    return () => observer.disconnect();
+  }, []);
+
   // Convert canvas pixel coordinates to phantom mm coordinates [-135, +135]
   const canvasToMm = (clientX: number, clientY: number, canvas: HTMLCanvasElement) => {
     const rect = canvas.getBoundingClientRect();
-    const normX = (clientX - rect.left) / rect.width;
-    const normY = (clientY - rect.top) / rect.height;
-    const worldSpan = 270; // [-135mm, +135mm]
-    const xMm = (normX - 0.5) * worldSpan;
-    const yMm = (0.5 - normY) * worldSpan; // +Y is up (anterior)
+    const cx = rect.width / 2;
+    const cy = rect.height / 2;
+    const scale = Math.min(rect.width, rect.height) / 275;
+    const xMm = (clientX - rect.left - cx) / scale;
+    const yMm = (cy - (clientY - rect.top)) / scale;
     return { xMm, yMm };
   };
 
@@ -60,7 +87,6 @@ export const ObjectGeometryWindow: React.FC<ObjectGeometryWindowProps> = ({
     if (!canvas) return;
     const { xMm, yMm } = canvasToMm(e.clientX, e.clientY, canvas);
 
-    // Hit-test primitives from smallest area to largest area so inner inclusions are easy to grab
     const sorted = [...primitives]
       .filter((p) => p.visible)
       .sort((a, b) => a.radiusX * a.radiusY - b.radiusX * b.radiusY);
@@ -104,11 +130,13 @@ export const ObjectGeometryWindow: React.FC<ObjectGeometryWindowProps> = ({
     if (!ctx) return;
 
     const dpr = window.devicePixelRatio || 1;
-    const width = canvas.clientWidth || 420;
-    const height = canvas.clientHeight || 360;
-    canvas.width = width * dpr;
-    canvas.height = height * dpr;
-    ctx.scale(dpr, dpr);
+    const width = canvasSize.w;
+    const height = canvasSize.h;
+    if (width <= 0 || height <= 0) return;
+
+    canvas.width = Math.round(width * dpr);
+    canvas.height = Math.round(height * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     const cx = width / 2;
     const cy = height / 2;
@@ -125,14 +153,10 @@ export const ObjectGeometryWindow: React.FC<ObjectGeometryWindowProps> = ({
     ctx.strokeStyle = isDark ? 'rgba(148, 163, 184, 0.12)' : 'rgba(100, 116, 139, 0.16)';
     ctx.lineWidth = 1;
 
-    // Concentric FOV rings at r = 50mm and r = 100mm (FOV boundary)
     [50, 100].forEach((rMm, idx) => {
       ctx.beginPath();
-      if (idx === 1) {
-        ctx.setLineDash([4, 4]);
-      } else {
-        ctx.setLineDash([]);
-      }
+      if (idx === 1) ctx.setLineDash([4, 4]);
+      else ctx.setLineDash([]);
       ctx.arc(cx, cy, rMm * scale, 0, Math.PI * 2);
       ctx.stroke();
     });
@@ -153,16 +177,16 @@ export const ObjectGeometryWindow: React.FC<ObjectGeometryWindowProps> = ({
     ctx.lineTo(cx, mmToPxY(115));
     ctx.stroke();
 
-    // Axis degree labels on gantry ring
+    // Axis degree labels
     ctx.fillStyle = isDark ? '#64748B' : '#475569';
     ctx.font = '500 10px "JetBrains Mono", monospace';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('+X (0°)', mmToPxX(127), cy);
-    ctx.fillText('+Y (90°)', cx, mmToPxY(127));
-    ctx.fillText('-X (180°)', mmToPxX(-127), cy);
+    ctx.fillText('+X (0°)', mmToPxX(126), cy);
+    ctx.fillText('+Y (90°)', cx, mmToPxY(126));
+    ctx.fillText('-X (180°)', mmToPxX(-126), cy);
 
-    // 3. Draw Phantom Primitives (sorted largest to smallest so inner inclusions render on top)
+    // 3. Draw Phantom Primitives
     const sortedPrims = [...primitives]
       .filter((p) => p.visible)
       .sort((a, b) => b.radiusX * b.radiusY - a.radiusX * a.radiusY);
@@ -179,10 +203,8 @@ export const ObjectGeometryWindow: React.FC<ObjectGeometryWindowProps> = ({
       ctx.translate(mmToPxX(prim.centerX), mmToPxY(prim.centerY));
       ctx.rotate((-prim.tiltDeg * Math.PI) / 180);
 
-      // Map Hounsfield Units (-1000 to +2000) to grayscale clinical CT luminance
       const huNorm = Math.max(0, Math.min(1, (prim.hu + 1000) / 2400));
       const lum = Math.round(18 + huNorm * 225);
-      // Modulate alpha slightly if partial volume overlap is < 100%
       const alpha = 0.25 + 0.7 * Math.max(0.15, pvWeight);
 
       ctx.fillStyle = `rgba(${lum}, ${lum}, ${Math.min(255, lum + 8)}, ${alpha.toFixed(2)})`;
@@ -208,7 +230,6 @@ export const ObjectGeometryWindow: React.FC<ObjectGeometryWindowProps> = ({
       ctx.fill();
       ctx.stroke();
 
-      // If selected, draw center reticle and polar radius line
       if (isSelected) {
         ctx.fillStyle = '#F59E0B';
         ctx.beginPath();
@@ -218,7 +239,7 @@ export const ObjectGeometryWindow: React.FC<ObjectGeometryWindowProps> = ({
       ctx.restore();
     }
 
-    // If a primitive is selected, draw dashed polar vector from isocenter (0,0) to (x0, y0)
+    // Selected polar vector
     const selectedPrim = primitives.find((p) => p.id === selectedPrimitiveId && p.visible);
     if (selectedPrim && (Math.abs(selectedPrim.centerX) > 1 || Math.abs(selectedPrim.centerY) > 1)) {
       ctx.save();
@@ -232,12 +253,11 @@ export const ObjectGeometryWindow: React.FC<ObjectGeometryWindowProps> = ({
       ctx.restore();
     }
 
-    // 4. Draw X-Ray Beam Paths & Detector Array for Current Gantry Angle
+    // 4. Draw X-Ray Beam Paths & Detector Array
     const rays = currentProjection.rays;
     const maxAtten = Math.max(0.5, currentProjection.maxAttenuation);
 
     if (showRayLines && rays.length > 0) {
-      // Sample ~32 rays visually so canvas remains crisp even at 256 bins
       const stride = Math.max(1, Math.floor(rays.length / 36));
       for (let i = 0; i < rays.length; i += stride) {
         const r = rays[i];
@@ -253,7 +273,7 @@ export const ObjectGeometryWindow: React.FC<ObjectGeometryWindowProps> = ({
       }
     }
 
-    // 5. Draw Source Bar / Focal Spot and Opposite Detector Array with Live Projection Profile
+    // 5. Source Bar / Focal Spot & Detector Array
     const thetaRad = (params.currentAngleDeg * Math.PI) / 180;
     const cosT = Math.cos(thetaRad);
     const sinT = Math.sin(thetaRad);
@@ -261,7 +281,6 @@ export const ObjectGeometryWindow: React.FC<ObjectGeometryWindowProps> = ({
     const dirY = cosT;
 
     if (params.beamMode === 'parallel') {
-      // Source Emitter Bar at -118mm along dir
       const srcCenterX = -118 * dirX;
       const srcCenterY = -118 * dirY;
       ctx.strokeStyle = '#06B6D4';
@@ -271,7 +290,6 @@ export const ObjectGeometryWindow: React.FC<ObjectGeometryWindowProps> = ({
       ctx.lineTo(mmToPxX(srcCenterX + 100 * cosT), mmToPxY(srcCenterY + 100 * sinT));
       ctx.stroke();
 
-      // Detector Array Bar at +118mm along dir
       const detCenterX = 118 * dirX;
       const detCenterY = 118 * dirY;
       ctx.strokeStyle = isDark ? '#94A3B8' : '#334155';
@@ -281,7 +299,6 @@ export const ObjectGeometryWindow: React.FC<ObjectGeometryWindowProps> = ({
       ctx.lineTo(mmToPxX(detCenterX + 100 * cosT), mmToPxY(detCenterY + 100 * sinT));
       ctx.stroke();
 
-      // Draw miniature elevated attenuation shadow curve directly behind the detector bar!
       ctx.strokeStyle = '#06B6D4';
       ctx.fillStyle = 'rgba(6, 182, 212, 0.22)';
       ctx.lineWidth = 1.6;
@@ -294,7 +311,7 @@ export const ObjectGeometryWindow: React.FC<ObjectGeometryWindowProps> = ({
         );
         for (let i = 0; i < rays.length; i++) {
           const r = rays[i];
-          const heightMm = (r.attenuation / maxAtten) * 18;
+          const heightMm = (r.attenuation / maxAtten) * 16;
           const px = mmToPxX(detCenterX + r.sMm * cosT + heightMm * dirX);
           const py = mmToPxY(detCenterY + r.sMm * sinT + heightMm * dirY);
           ctx.lineTo(px, py);
@@ -309,8 +326,7 @@ export const ObjectGeometryWindow: React.FC<ObjectGeometryWindowProps> = ({
         ctx.stroke();
       }
     } else {
-      // Fan-Beam Source Focal Spot
-      const dSoVisual = 122; // Clamped slightly outside gantry ring so focal spot is always visible
+      const dSoVisual = 122;
       const sx = -dSoVisual * dirX;
       const sy = -dSoVisual * dirY;
 
@@ -319,7 +335,6 @@ export const ObjectGeometryWindow: React.FC<ObjectGeometryWindowProps> = ({
       ctx.arc(mmToPxX(sx), mmToPxY(sy), 6, 0, Math.PI * 2);
       ctx.fill();
 
-      // Detector Arc on opposite side
       ctx.strokeStyle = '#06B6D4';
       ctx.lineWidth = 2.5;
       ctx.beginPath();
@@ -331,7 +346,7 @@ export const ObjectGeometryWindow: React.FC<ObjectGeometryWindowProps> = ({
       ctx.stroke();
     }
 
-    // 6. If user is probing a specific (s, θ) point in the Sinogram or Projection window, highlight that exact ray!
+    // 6. Probed single ray highlight
     if (probedPoint) {
       const probeProj =
         Math.abs(probedPoint.angleDeg - params.currentAngleDeg) < 0.01
@@ -349,7 +364,6 @@ export const ObjectGeometryWindow: React.FC<ObjectGeometryWindowProps> = ({
         ctx.lineTo(mmToPxX(probeRay.x2), mmToPxY(probeRay.y2));
         ctx.stroke();
 
-        // Draw detector hit dot
         ctx.fillStyle = '#F59E0B';
         ctx.beginPath();
         ctx.arc(mmToPxX(probeRay.x2), mmToPxY(probeRay.y2), 4.5, 0, Math.PI * 2);
@@ -358,6 +372,7 @@ export const ObjectGeometryWindow: React.FC<ObjectGeometryWindowProps> = ({
       }
     }
   }, [
+    canvasSize,
     primitives,
     params,
     currentProjection,
@@ -367,7 +382,7 @@ export const ObjectGeometryWindow: React.FC<ObjectGeometryWindowProps> = ({
     showRayLines,
   ]);
 
-  // Draw companion Axial Z-Slab Cross-Section Diagram (illustrating Slice Thickness Δz & Partial Volume)
+  // Draw companion Axial Z-Slab Cross-Section Diagram
   useEffect(() => {
     const canvas = zSlabCanvasRef.current;
     if (!canvas) return;
@@ -375,21 +390,22 @@ export const ObjectGeometryWindow: React.FC<ObjectGeometryWindowProps> = ({
     if (!ctx) return;
 
     const dpr = window.devicePixelRatio || 1;
-    const width = canvas.clientWidth || 420;
-    const height = canvas.clientHeight || 68;
-    canvas.width = width * dpr;
-    canvas.height = height * dpr;
-    ctx.scale(dpr, dpr);
+    const width = zSlabSize.w;
+    const height = zSlabSize.h;
+    if (width <= 0 || height <= 0) return;
+
+    canvas.width = Math.round(width * dpr);
+    canvas.height = Math.round(height * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     ctx.fillStyle = isDark ? '#080C14' : '#F1F5F9';
     ctx.fillRect(0, 0, width, height);
 
     const cx = width / 2;
     const cy = height / 2;
-    const xScale = (width - 80) / 200; // [-100mm, +100mm]
-    const zScale = (height - 16) / 26; // [-13mm, +13mm]
+    const xScale = (width - 80) / 200;
+    const zScale = (height - 12) / 26;
 
-    // Draw center z = 0 axis line
     ctx.strokeStyle = isDark ? 'rgba(148, 163, 184, 0.2)' : 'rgba(100, 116, 139, 0.25)';
     ctx.lineWidth = 1;
     ctx.beginPath();
@@ -397,7 +413,6 @@ export const ObjectGeometryWindow: React.FC<ObjectGeometryWindowProps> = ({
     ctx.lineTo(width - 40, cy);
     ctx.stroke();
 
-    // Draw primitives in (x, z) cross-section
     const visiblePrims = primitives.filter((p) => p.visible);
     for (const prim of visiblePrims) {
       const px = cx + prim.centerX * xScale;
@@ -424,7 +439,6 @@ export const ObjectGeometryWindow: React.FC<ObjectGeometryWindowProps> = ({
       ctx.stroke();
     }
 
-    // Draw active Collimated X-Ray Slice Slab [z0 - Δz/2, z0 + Δz/2]
     const slabCenterY = cy - params.sliceZOffsetMm * zScale;
     const slabHalfH = Math.max(1.5, (params.sliceThicknessMm / 2) * zScale);
 
@@ -440,14 +454,13 @@ export const ObjectGeometryWindow: React.FC<ObjectGeometryWindowProps> = ({
     ctx.lineTo(width - 32, slabCenterY + slabHalfH);
     ctx.stroke();
 
-    // Labels
     ctx.fillStyle = isDark ? '#94A3B8' : '#475569';
-    ctx.font = '500 10px "JetBrains Mono", monospace';
+    ctx.font = '500 9px "JetBrains Mono", monospace';
     ctx.textAlign = 'left';
-    ctx.fillText('Z-SLAB', 6, 14);
+    ctx.fillText('Z-SLAB', 6, 12);
     ctx.fillStyle = '#06B6D4';
-    ctx.fillText(`Δz=${params.sliceThicknessMm.toFixed(1)}mm`, 6, height - 8);
-  }, [primitives, params.sliceThicknessMm, params.sliceZOffsetMm, selectedPrimitiveId, isDark]);
+    ctx.fillText(`Δz=${params.sliceThicknessMm.toFixed(1)}`, 6, height - 6);
+  }, [zSlabSize, primitives, params.sliceThicknessMm, params.sliceZOffsetMm, selectedPrimitiveId, isDark]);
 
   const selectedPrim = primitives.find((p) => p.id === selectedPrimitiveId);
   const selectedPvWeight = selectedPrim
@@ -460,80 +473,78 @@ export const ObjectGeometryWindow: React.FC<ObjectGeometryWindowProps> = ({
     : null;
 
   return (
-    <section className="flex flex-col bg-white dark:bg-[#111827] border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
+    <section className="flex flex-col h-full min-h-0 bg-white dark:bg-[#111827] border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
       {/* Window Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 dark:border-slate-800">
-        <div>
-          <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 font-mono">
+      <div className="flex items-center justify-between px-3.5 py-2 border-b border-slate-200 dark:border-slate-800 shrink-0">
+        <div className="min-w-0">
+          <div className="flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400 font-mono">
             <span>WINDOW 01</span>
             <span aria-hidden="true">·</span>
-            <span>SPATIAL DOMAIN μ(x, y, z)</span>
+            <span className="truncate">SPATIAL DOMAIN μ(x, y, z)</span>
           </div>
-          <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+          <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
             Object &amp; Projection Geometry
           </h2>
         </div>
 
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={onToggleRayLines}
-            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg border transition-colors whitespace-nowrap shrink-0 ${
-              showRayLines
-                ? 'bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border-cyan-500/30'
-                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'
-            }`}
-            title="Toggle X-Ray Beam Lines"
-          >
-            <Eye className="w-3.5 h-3.5" />
-            <span>Rays</span>
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={onToggleRayLines}
+          className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg border transition-colors whitespace-nowrap shrink-0 ${
+            showRayLines
+              ? 'bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border-cyan-500/30'
+              : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+          }`}
+          title="Toggle X-Ray Beam Lines"
+        >
+          <Eye className="w-3.5 h-3.5" />
+          <span>Rays</span>
+        </button>
       </div>
 
-      {/* Interactive 2D Gantry Canvas */}
-      <div className="relative flex-1 min-h-[310px] w-full select-none">
+      {/* Interactive 2D Gantry Canvas (absolute inside flex-1 container to prevent resize loops) */}
+      <div ref={containerRef} className="relative flex-1 min-h-0 w-full select-none overflow-hidden">
         <canvas
           ref={canvasRef}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
           onPointerLeave={() => setHoverCoordsMm(null)}
-          className="w-full h-full min-h-[310px] cursor-grab active:cursor-grabbing block"
+          className="absolute inset-0 w-full h-full cursor-grab active:cursor-grabbing block"
         />
 
         {/* Top-left live gantry telemetry overlay */}
-        <div className="pointer-events-none absolute top-3 left-3 flex flex-col gap-0.5 bg-white/85 dark:bg-[#0B0F19]/85 backdrop-blur-xs px-2.5 py-1.5 rounded-md border border-slate-200/80 dark:border-slate-800/80 text-xs font-mono">
+        <div className="pointer-events-none absolute top-2 left-2 flex flex-col gap-0.5 bg-white/85 dark:bg-[#0B0F19]/85 backdrop-blur-xs px-2 py-1 rounded-md border border-slate-200/80 dark:border-slate-800/80 text-[11px] font-mono">
           <div className="text-slate-900 dark:text-slate-100 font-semibold">
             θ = {params.currentAngleDeg.toFixed(1)}°
-            <span className="text-slate-400 dark:text-slate-500 mx-1.5">·</span>
+            <span className="text-slate-400 dark:text-slate-500 mx-1">·</span>
             <span className="text-cyan-600 dark:text-cyan-400 uppercase">{params.beamMode}</span>
           </div>
-          <div className="text-slate-500 dark:text-slate-400 text-[11px]">
+          <div className="text-slate-500 dark:text-slate-400 text-[10px]">
             {hoverCoordsMm
-              ? `Cursor: (${hoverCoordsMm.x} mm, ${hoverCoordsMm.y} mm)`
-              : 'Drag any phantom inclusion to move'}
+              ? `(${hoverCoordsMm.x} mm, ${hoverCoordsMm.y} mm)`
+              : 'Drag objects to reposition'}
           </div>
         </div>
 
         {/* Selected Primitive Mini Readout */}
         {selectedPrim && (
-          <div className="pointer-events-none absolute bottom-3 left-3 right-3 flex items-center justify-between bg-white/90 dark:bg-[#0B0F19]/90 backdrop-blur-xs px-3 py-1.5 rounded-md border border-amber-500/40 text-xs">
-            <div className="flex items-center gap-2 truncate">
-              <Move className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+          <div className="pointer-events-none absolute bottom-2 left-2 right-2 flex items-center justify-between gap-2 bg-white/90 dark:bg-[#0B0F19]/90 backdrop-blur-xs px-2.5 py-1 rounded-md border border-amber-500/40 text-[11px]">
+            <div className="flex items-center gap-1.5 truncate">
+              <Move className="w-3 h-3 text-amber-500 shrink-0" />
               <span className="font-medium text-slate-900 dark:text-slate-100 truncate">
                 {selectedPrim.label}
               </span>
             </div>
-            <div className="flex items-center gap-2 font-mono text-[11px] text-slate-600 dark:text-slate-300 shrink-0">
+            <div className="flex items-center gap-1.5 font-mono text-[10px] text-slate-600 dark:text-slate-300 shrink-0">
               <span>
-                ({selectedPrim.centerX}, {selectedPrim.centerY}) mm
+                ({selectedPrim.centerX},{selectedPrim.centerY})
               </span>
               <span aria-hidden="true">·</span>
-              <span>{selectedPrim.hu} HU</span>
+              <span>{selectedPrim.hu}HU</span>
               <span aria-hidden="true">·</span>
               <span className="text-cyan-600 dark:text-cyan-400">
-                PV: {Math.round((selectedPvWeight ?? 1) * 100)}%
+                PV:{Math.round((selectedPvWeight ?? 1) * 100)}%
               </span>
             </div>
           </div>
@@ -541,18 +552,23 @@ export const ObjectGeometryWindow: React.FC<ObjectGeometryWindowProps> = ({
       </div>
 
       {/* Companion Axial Slice Thickness (Z-Slab) Cross Section */}
-      <div className="border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-[#080C14] px-3 py-2">
-        <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 mb-1">
+      <div className="border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-[#080C14] px-3 py-1.5 shrink-0">
+        <div className="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400 mb-1">
           <span className="inline-flex items-center gap-1 font-medium text-slate-700 dark:text-slate-300">
-            <Layers className="w-3.5 h-3.5 text-cyan-500" />
-            Axial Collimation Cross-Section (X–Z Plane)
+            <Layers className="w-3 h-3 text-cyan-500" />
+            Axial Collimation (X–Z)
           </span>
           <span className="font-mono">
-            Collimator Δz = {params.sliceThicknessMm.toFixed(1)} mm · z₀ ={' '}
+            Δz = {params.sliceThicknessMm.toFixed(1)} mm · z₀ ={' '}
             {params.sliceZOffsetMm >= 0 ? `+${params.sliceZOffsetMm.toFixed(1)}` : params.sliceZOffsetMm.toFixed(1)} mm
           </span>
         </div>
-        <canvas ref={zSlabCanvasRef} className="w-full h-[64px] rounded border border-slate-200/70 dark:border-slate-800/80 block" />
+        <div
+          ref={zSlabContainerRef}
+          className="relative w-full h-[46px] rounded border border-slate-200/70 dark:border-slate-800/80 overflow-hidden"
+        >
+          <canvas ref={zSlabCanvasRef} className="absolute inset-0 w-full h-full block" />
+        </div>
       </div>
     </section>
   );

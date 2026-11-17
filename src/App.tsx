@@ -321,17 +321,17 @@ export default function App() {
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-[#0B0F19] text-slate-900 dark:text-slate-100">
       {/* Top Bar Contract: 3 zones separated by gap-8 */}
-      <header className="sticky top-0 z-30 flex items-center justify-between gap-8 px-6 py-3.5 bg-white/95 dark:bg-[#0B0F19]/95 backdrop-blur-xs border-b border-slate-200 dark:border-slate-800">
+      <header className="sticky top-0 z-30 flex items-center justify-between gap-8 px-5 py-2.5 bg-white/95 dark:bg-[#0B0F19]/95 backdrop-blur-xs border-b border-slate-200 dark:border-slate-800">
         {/* Zone 1: Single text element wordmark */}
         <a
           href="#workbench"
-          className="text-lg font-bold tracking-tight text-slate-900 dark:text-slate-100 whitespace-nowrap shrink-0"
+          className="text-base font-bold tracking-tight text-slate-900 dark:text-slate-100 whitespace-nowrap shrink-0"
         >
           RadonLab
         </a>
 
         {/* Zone 2: 4 concise single-line text navigation links */}
-        <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-slate-600 dark:text-slate-400">
+        <nav className="hidden md:flex items-center gap-6 text-xs font-medium text-slate-600 dark:text-slate-400">
           <a
             href="#workbench"
             className="hover:text-slate-900 dark:hover:text-slate-100 transition-colors whitespace-nowrap shrink-0"
@@ -368,17 +368,17 @@ export default function App() {
             type="button"
             onClick={() => setIsDark((prev) => !prev)}
             aria-label={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
-            className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-medium rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 hover:border-cyan-500/50 transition-colors whitespace-nowrap shrink-0"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 hover:border-cyan-500/50 transition-colors whitespace-nowrap shrink-0"
           >
             {isDark ? (
               <>
-                <Sun className="w-4 h-4 text-amber-400" />
-                <span>Light Mode</span>
+                <Sun className="w-3.5 h-3.5 text-amber-400" />
+                <span>Light</span>
               </>
             ) : (
               <>
-                <Moon className="w-4 h-4 text-slate-700" />
-                <span>Dark Mode</span>
+                <Moon className="w-3.5 h-3.5 text-slate-700" />
+                <span>Dark</span>
               </>
             )}
           </button>
@@ -386,24 +386,20 @@ export default function App() {
       </header>
 
       {/* Main Content Container */}
-      <main id="workbench" className="flex-1 max-w-[1440px] w-full mx-auto px-4 sm:px-6 py-5 space-y-6">
+      <main id="workbench" className="flex-1 max-w-[1440px] w-full mx-auto px-4 sm:px-5 py-3 space-y-3">
         {/* Compact Topic Header & Quick Phantom Switcher */}
-        <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
-          <div>
-            <div className="flex items-center gap-2 text-xs font-mono text-cyan-600 dark:text-cyan-400">
-              <span>MODULE 01</span>
-              <span aria-hidden="true">·</span>
-              <span>MEDICAL SYSTEMS ENGINEERING TOMOGRAPHY LAB</span>
-              <span aria-hidden="true">·</span>
-              <span>RADON TRANSFORM R[μ](s, θ)</span>
-            </div>
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100 mt-1">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2 pb-1">
+          <div className="flex items-baseline gap-3 flex-wrap">
+            <h1 className="text-lg sm:text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
               How Is a CT Sinogram Formed?
             </h1>
+            <span className="text-[11px] font-mono text-cyan-600 dark:text-cyan-400">
+              Module 01 · Radon Transform R[μ](s, θ)
+            </span>
           </div>
 
           {/* Interactive Phantom Quick-Select Bar */}
-          <div className="flex flex-wrap items-center gap-1.5 bg-slate-100 dark:bg-[#111827] p-1.5 rounded-xl border border-slate-200 dark:border-slate-800">
+          <div className="flex flex-wrap items-center gap-1 bg-slate-100 dark:bg-[#111827] p-1 rounded-lg border border-slate-200 dark:border-slate-800">
             {PHANTOM_PRESETS.map((preset) => {
               const active = preset.id === activePresetId;
               return (
@@ -411,7 +407,7 @@ export default function App() {
                   key={preset.id}
                   type="button"
                   onClick={() => handleSelectPreset(preset)}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors whitespace-nowrap shrink-0 ${
+                  className={`px-2.5 py-1 text-[11px] font-medium rounded-md transition-colors whitespace-nowrap shrink-0 ${
                     active
                       ? 'bg-white dark:bg-slate-800 text-cyan-600 dark:text-cyan-400 shadow-xs border border-slate-200/80 dark:border-slate-700'
                       : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
@@ -425,14 +421,14 @@ export default function App() {
         </div>
 
         {/* Acquisition & Real-Time Gantry Animation Control Console */}
-        <section className="bg-white dark:bg-[#111827] border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-2xs">
-          <div className="grid grid-cols-1 xl:grid-cols-12 gap-5 items-center">
+        <section className="bg-white dark:bg-[#111827] border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2.5 shadow-2xs">
+          <div className="grid grid-cols-1 xl:grid-cols-12 gap-3 items-center">
             {/* Transport & Animation Controls (4 cols) */}
-            <div className="xl:col-span-4 flex flex-wrap items-center gap-2 border-b xl:border-b-0 xl:border-r border-slate-200 dark:border-slate-800 pb-3 xl:pb-0 xl:pr-4">
+            <div className="xl:col-span-4 flex flex-wrap items-center gap-1.5 border-b xl:border-b-0 xl:border-r border-slate-200 dark:border-slate-800 pb-2.5 xl:pb-0 xl:pr-3">
               <button
                 type="button"
                 onClick={handleTogglePlay}
-                className={`inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap shrink-0 ${
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap shrink-0 ${
                   isPlaying
                     ? 'bg-amber-500 text-slate-950 hover:bg-amber-400'
                     : 'bg-cyan-600 text-white hover:bg-cyan-500'
@@ -440,13 +436,13 @@ export default function App() {
               >
                 {isPlaying ? (
                   <>
-                    <Pause className="w-4 h-4 fill-current" />
-                    <span>Pause Scan</span>
+                    <Pause className="w-3.5 h-3.5 fill-current" />
+                    <span>Pause</span>
                   </>
                 ) : (
                   <>
-                    <Play className="w-4 h-4 fill-current" />
-                    <span>Play Scan &amp; Draw</span>
+                    <Play className="w-3.5 h-3.5 fill-current" />
+                    <span>Play Scan</span>
                   </>
                 )}
               </button>
@@ -455,64 +451,64 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => handleStepAngle(-1)}
-                  className="p-1.5 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white rounded-md"
+                  className="p-1 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white rounded-md"
                   title={`Step Backward (-${params.angularStepDeg}°)`}
                 >
-                  <ChevronLeft className="w-4 h-4" />
+                  <ChevronLeft className="w-3.5 h-3.5" />
                 </button>
-                <span className="px-2 text-xs font-mono text-slate-700 dark:text-slate-200">
+                <span className="px-1.5 text-[11px] font-mono text-slate-700 dark:text-slate-200">
                   ±{params.angularStepDeg}°
                 </span>
                 <button
                   type="button"
                   onClick={() => handleStepAngle(1)}
-                  className="p-1.5 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white rounded-md"
+                  className="p-1 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white rounded-md"
                   title={`Step Forward (+${params.angularStepDeg}°)`}
                 >
-                  <ChevronRight className="w-4 h-4" />
+                  <ChevronRight className="w-3.5 h-3.5" />
                 </button>
               </div>
 
               <button
                 type="button"
                 onClick={handleResetSweep}
-                className="inline-flex items-center gap-1 px-2.5 py-2 text-xs font-medium rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-600 transition-colors whitespace-nowrap shrink-0"
+                className="inline-flex items-center gap-1 px-2 py-1.5 text-[11px] font-medium rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-600 transition-colors whitespace-nowrap shrink-0"
                 title="Clear sinogram and reset gantry to 0°"
               >
-                <RotateCcw className="w-3.5 h-3.5" />
-                <span>Zero Sweep</span>
+                <RotateCcw className="w-3 h-3" />
+                <span>Zero</span>
               </button>
 
               <button
                 type="button"
                 onClick={handleCompleteSinogram}
-                className="inline-flex items-center gap-1 px-2.5 py-2 text-xs font-medium rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-600 transition-colors whitespace-nowrap shrink-0"
+                className="inline-flex items-center gap-1 px-2 py-1.5 text-[11px] font-medium rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-600 transition-colors whitespace-nowrap shrink-0"
                 title="Fill entire sinogram immediately"
               >
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-                <span>Fill All</span>
+                <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                <span>Fill</span>
               </button>
 
               <select
                 aria-label="Playback Speed"
                 value={playbackSpeed}
                 onChange={(e) => setPlaybackSpeed(Number(e.target.value))}
-                className="px-2 py-2 text-xs font-mono rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200"
+                className="px-2 py-1.5 text-[11px] font-mono rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200"
               >
-                <option value={0.5}>0.5× Slow</option>
-                <option value={1}>1.0× Norm</option>
-                <option value={2}>2.0× Fast</option>
-                <option value={4}>4.0× Rapid</option>
+                <option value={0.5}>0.5×</option>
+                <option value={1}>1.0×</option>
+                <option value={2}>2.0×</option>
+                <option value={4}>4.0×</option>
               </select>
             </div>
 
-            {/* Primary Continuous Sliders: Projection Angle θ & Slice Thickness Δz (5 cols) */}
-            <div className="xl:col-span-5 grid grid-cols-1 sm:grid-cols-2 gap-4 border-b xl:border-b-0 xl:border-r border-slate-200 dark:border-slate-800 pb-3 xl:pb-0 xl:pr-4">
+            {/* Primary Continuous Sliders: Projection Angle θ & Slice Thickness Δz (4 cols) */}
+            <div className="xl:col-span-4 grid grid-cols-1 sm:grid-cols-2 gap-3 border-b xl:border-b-0 xl:border-r border-slate-200 dark:border-slate-800 pb-2.5 xl:pb-0 xl:pr-3">
               {/* Projection Angle Slider */}
               <div>
-                <div className="flex items-center justify-between text-xs mb-1">
+                <div className="flex items-center justify-between text-[11px] mb-0.5">
                   <span className="font-medium text-slate-700 dark:text-slate-300">
-                    Projection Angle (θ)
+                    Angle (θ)
                   </span>
                   <span className="font-mono font-semibold text-cyan-600 dark:text-cyan-400">
                     {params.currentAngleDeg.toFixed(0)}° / {params.maxAngleDeg}°
@@ -532,18 +528,13 @@ export default function App() {
                   }}
                   className="w-full accent-cyan-500"
                 />
-                <div className="flex justify-between text-[10px] font-mono text-slate-400 mt-0.5">
-                  <span>0° (AP)</span>
-                  <span>90° (Lateral)</span>
-                  <span>{params.maxAngleDeg}°</span>
-                </div>
               </div>
 
               {/* Axial Slice Thickness Δz Slider */}
               <div>
-                <div className="flex items-center justify-between text-xs mb-1">
+                <div className="flex items-center justify-between text-[11px] mb-0.5">
                   <span className="font-medium text-slate-700 dark:text-slate-300">
-                    Slice Thickness (Δz)
+                    Slice Δz
                   </span>
                   <span className="font-mono font-semibold text-cyan-600 dark:text-cyan-400">
                     {params.sliceThicknessMm.toFixed(1)} mm
@@ -563,22 +554,17 @@ export default function App() {
                   }
                   className="w-full accent-cyan-500"
                 />
-                <div className="flex justify-between text-[10px] font-mono text-slate-400 mt-0.5">
-                  <span>0.5 mm (HRCT)</span>
-                  <span>5.0 mm (Std)</span>
-                  <span>20 mm (Slab)</span>
-                </div>
               </div>
             </div>
 
-            {/* Geometry & Resolution Controls (3 cols) */}
-            <div className="xl:col-span-3 flex flex-wrap items-center justify-between gap-2">
+            {/* Geometry & Resolution Controls (4 cols) */}
+            <div className="xl:col-span-4 flex flex-wrap items-center justify-between gap-1.5">
               {/* Parallel vs Fan-Beam Segmented Toggle */}
-              <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-lg border border-slate-200 dark:border-slate-700">
+              <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg border border-slate-200 dark:border-slate-700">
                 <button
                   type="button"
                   onClick={() => setParams((prev) => ({ ...prev, beamMode: 'parallel' }))}
-                  className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors whitespace-nowrap shrink-0 ${
+                  className={`px-2 py-1 text-[11px] font-medium rounded-md transition-colors whitespace-nowrap shrink-0 ${
                     params.beamMode === 'parallel'
                       ? 'bg-white dark:bg-slate-900 text-cyan-600 dark:text-cyan-400 shadow-2xs'
                       : 'text-slate-600 dark:text-slate-400'
@@ -589,7 +575,7 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => setParams((prev) => ({ ...prev, beamMode: 'fan' }))}
-                  className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors whitespace-nowrap shrink-0 ${
+                  className={`px-2 py-1 text-[11px] font-medium rounded-md transition-colors whitespace-nowrap shrink-0 ${
                     params.beamMode === 'fan'
                       ? 'bg-white dark:bg-slate-900 text-cyan-600 dark:text-cyan-400 shadow-2xs'
                       : 'text-slate-600 dark:text-slate-400'
@@ -600,7 +586,7 @@ export default function App() {
               </div>
 
               {/* 180° vs 360° Scan Range */}
-              <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-lg border border-slate-200 dark:border-slate-700">
+              <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg border border-slate-200 dark:border-slate-700">
                 {([180, 360] as const).map((range) => (
                   <button
                     key={range}
@@ -613,7 +599,7 @@ export default function App() {
                       }));
                       setMaxAcquiredAngleDeg(range);
                     }}
-                    className={`px-2 py-1 text-xs font-mono rounded-md transition-colors whitespace-nowrap shrink-0 ${
+                    className={`px-2 py-1 text-[11px] font-mono rounded-md transition-colors whitespace-nowrap shrink-0 ${
                       params.maxAngleDeg === range
                         ? 'bg-white dark:bg-slate-900 text-cyan-600 dark:text-cyan-400 shadow-2xs'
                         : 'text-slate-600 dark:text-slate-400'
@@ -623,6 +609,25 @@ export default function App() {
                   </button>
                 ))}
               </div>
+
+              {/* Angular Step Δθ */}
+              <select
+                aria-label="Angular Step Resolution"
+                value={params.angularStepDeg}
+                onChange={(e) =>
+                  setParams((prev) => ({
+                    ...prev,
+                    angularStepDeg: Number(e.target.value) as 1 | 2 | 3 | 5,
+                  }))
+                }
+                className="px-1.5 py-1 text-[11px] font-mono rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200"
+                title="Angular Step Size (Δθ)"
+              >
+                <option value={1}>Δθ=1°</option>
+                <option value={2}>Δθ=2°</option>
+                <option value={3}>Δθ=3°</option>
+                <option value={5}>Δθ=5°</option>
+              </select>
 
               {/* Detector Bins Selector */}
               <select
@@ -634,72 +639,78 @@ export default function App() {
                     detectorBins: Number(e.target.value) as 64 | 128 | 192 | 256,
                   }))
                 }
-                className="px-2 py-1.5 text-xs font-mono rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200"
+                className="px-1.5 py-1 text-[11px] font-mono rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200"
                 title="Number of Detector Channels (Ns)"
               >
-                <option value={64}>64 Bins</option>
-                <option value={128}>128 Bins</option>
-                <option value={192}>192 Bins</option>
-                <option value={256}>256 Bins</option>
+                <option value={64}>64 bins</option>
+                <option value={128}>128 bins</option>
+                <option value={192}>192 bins</option>
+                <option value={256}>256 bins</option>
               </select>
             </div>
           </div>
         </section>
 
-        {/* Three Synchronized Tomography Inspection Windows */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-stretch">
+        {/* Three Synchronized Tomography Inspection Windows — locked to single-screen height on desktop */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5 md:h-[clamp(350px,calc(100vh-215px),540px)]">
           {/* Window 1: Object & Projection Geometry */}
-          <ObjectGeometryWindow
-            primitives={primitives}
-            params={params}
-            currentProjection={currentProjection}
-            selectedPrimitiveId={selectedPrimitiveId}
-            onSelectPrimitive={setSelectedPrimitiveId}
-            onUpdatePrimitivePosition={handleUpdatePrimitivePosition}
-            probedPoint={probedPoint}
-            isDark={isDark}
-            showRayLines={showRayLines}
-            onToggleRayLines={() => setShowRayLines((v) => !v)}
-          />
+          <div className="h-[360px] md:h-full min-h-0">
+            <ObjectGeometryWindow
+              primitives={primitives}
+              params={params}
+              currentProjection={currentProjection}
+              selectedPrimitiveId={selectedPrimitiveId}
+              onSelectPrimitive={setSelectedPrimitiveId}
+              onUpdatePrimitivePosition={handleUpdatePrimitivePosition}
+              probedPoint={probedPoint}
+              isDark={isDark}
+              showRayLines={showRayLines}
+              onToggleRayLines={() => setShowRayLines((v) => !v)}
+            />
+          </div>
 
           {/* Window 2: Current Projection Profile */}
-          <CurrentProjectionWindow
-            params={params}
-            currentProjection={currentProjection}
-            primitives={primitives}
-            selectedPrimitiveId={selectedPrimitiveId}
-            probedPoint={probedPoint}
-            onProbeBin={handleProbeBinFromWindow2}
-            globalMaxAttenuation={fullSinogram.globalMax}
-            isDark={isDark}
-          />
+          <div className="h-[360px] md:h-full min-h-0">
+            <CurrentProjectionWindow
+              params={params}
+              currentProjection={currentProjection}
+              primitives={primitives}
+              selectedPrimitiveId={selectedPrimitiveId}
+              probedPoint={probedPoint}
+              onProbeBin={handleProbeBinFromWindow2}
+              globalMaxAttenuation={fullSinogram.globalMax}
+              isDark={isDark}
+            />
+          </div>
 
           {/* Window 3: 2D Sinogram Matrix */}
-          <SinogramWindow
-            params={params}
-            sinogram={fullSinogram}
-            primitives={primitives}
-            selectedPrimitiveId={selectedPrimitiveId}
-            maxAcquiredAngleDeg={maxAcquiredAngleDeg}
-            showFullGhostSinogram={showFullGhostSinogram}
-            onToggleGhostSinogram={() => setShowFullGhostSinogram((v) => !v)}
-            showSinusoidLocus={showSinusoidLocus}
-            onToggleSinusoidLocus={() => setShowSinusoidLocus((v) => !v)}
-            colormap={colormap}
-            onChangeColormap={setColormap}
-            probedPoint={probedPoint}
-            onProbePoint={setProbedPoint}
-            onSelectAngle={(angleDeg) => {
-              setIsPlaying(false);
-              setParams((prev) => ({ ...prev, currentAngleDeg: angleDeg }));
-              setMaxAcquiredAngleDeg((prevMax) => Math.max(prevMax, angleDeg));
-            }}
-            isDark={isDark}
-          />
+          <div className="h-[360px] md:h-full min-h-0">
+            <SinogramWindow
+              params={params}
+              sinogram={fullSinogram}
+              primitives={primitives}
+              selectedPrimitiveId={selectedPrimitiveId}
+              maxAcquiredAngleDeg={maxAcquiredAngleDeg}
+              showFullGhostSinogram={showFullGhostSinogram}
+              onToggleGhostSinogram={() => setShowFullGhostSinogram((v) => !v)}
+              showSinusoidLocus={showSinusoidLocus}
+              onToggleSinusoidLocus={() => setShowSinusoidLocus((v) => !v)}
+              colormap={colormap}
+              onChangeColormap={setColormap}
+              probedPoint={probedPoint}
+              onProbePoint={setProbedPoint}
+              onSelectAngle={(angleDeg) => {
+                setIsPlaying(false);
+                setParams((prev) => ({ ...prev, currentAngleDeg: angleDeg }));
+                setMaxAcquiredAngleDeg((prevMax) => Math.max(prevMax, angleDeg));
+              }}
+              isDark={isDark}
+            />
+          </div>
         </div>
 
         {/* Custom Phantom & Object Density Studio */}
-        <section id="phantom-studio" className="space-y-3">
+        <section id="phantom-studio" className="space-y-3 pt-2">
           <div className="flex items-center justify-between">
             <div>
               <div className="text-xs font-mono text-slate-500 dark:text-slate-400">

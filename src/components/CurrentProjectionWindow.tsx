@@ -28,18 +28,36 @@ export const CurrentProjectionWindow: React.FC<CurrentProjectionWindowProps> = (
   globalMaxAttenuation,
   isDark,
 }) => {
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [canvasSize, setCanvasSize] = useState<{ w: number; h: number }>({ w: 400, h: 300 });
   const [showThinSliceRef, setShowThinSliceRef] = useState<boolean>(true);
   const [showSelectedComponent, setShowSelectedComponent] = useState<boolean>(true);
 
   const selectedPrim = primitives.find((p) => p.id === selectedPrimitiveId && p.visible);
 
+  // Observe wrapper container size to prevent DPR resize feedback loops
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect;
+        if (width > 0 && height > 0) {
+          setCanvasSize({ w: Math.floor(width), h: Math.floor(height) });
+        }
+      }
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
   const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
-    const padLeft = 44;
-    const padRight = 18;
+    const padLeft = 42;
+    const padRight = 16;
     const plotW = rect.width - padLeft - padRight;
     const relX = e.clientX - rect.left - padLeft;
     if (relX < 0 || relX > plotW) {
@@ -58,18 +76,20 @@ export const CurrentProjectionWindow: React.FC<CurrentProjectionWindowProps> = (
     if (!ctx) return;
 
     const dpr = window.devicePixelRatio || 1;
-    const width = canvas.clientWidth || 420;
-    const height = canvas.clientHeight || 360;
-    canvas.width = width * dpr;
-    canvas.height = height * dpr;
-    ctx.scale(dpr, dpr);
+    const width = canvasSize.w;
+    const height = canvasSize.h;
+    if (width <= 0 || height <= 0) return;
 
-    const padLeft = 44;
-    const padRight = 18;
-    const padTop = 24;
-    const padBottom = 38;
-    const plotW = width - padLeft - padRight;
-    const plotH = height - padTop - padBottom;
+    canvas.width = Math.round(width * dpr);
+    canvas.height = Math.round(height * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    const padLeft = 42;
+    const padRight = 16;
+    const padTop = 22;
+    const padBottom = 34;
+    const plotW = Math.max(10, width - padLeft - padRight);
+    const plotH = Math.max(10, height - padTop - padBottom);
 
     // 1. Background
     ctx.fillStyle = isDark ? '#0B0F19' : '#F8FAFC';
@@ -90,7 +110,6 @@ export const CurrentProjectionWindow: React.FC<CurrentProjectionWindowProps> = (
     ctx.font = '500 10px "JetBrains Mono", monospace';
     ctx.fillStyle = isDark ? '#64748B' : '#475569';
 
-    // Horizontal Y grid lines (attenuation p = ∫ μ dl)
     const ySteps = 4;
     for (let i = 0; i <= ySteps; i++) {
       const val = (yMax * i) / ySteps;
@@ -105,37 +124,38 @@ export const CurrentProjectionWindow: React.FC<CurrentProjectionWindowProps> = (
       ctx.fillText(val.toFixed(1), padLeft - 6, y);
     }
 
-    // Vertical X grid lines (detector s in mm: -100, -50, 0, +50, +100)
     [-100, -50, 0, 50, 100].forEach((sVal) => {
       const u = (sVal + 100) / 200;
       const x = padLeft + u * plotW;
       ctx.beginPath();
-      if (sVal === 0) {
-        ctx.strokeStyle = isDark ? 'rgba(148, 163, 184, 0.28)' : 'rgba(71, 85, 105, 0.3)';
-      } else {
-        ctx.strokeStyle = isDark ? 'rgba(148, 163, 184, 0.12)' : 'rgba(100, 116, 139, 0.15)';
-      }
+      ctx.strokeStyle =
+        sVal === 0
+          ? isDark
+            ? 'rgba(148, 163, 184, 0.28)'
+            : 'rgba(71, 85, 105, 0.3)'
+          : isDark
+            ? 'rgba(148, 163, 184, 0.12)'
+            : 'rgba(100, 116, 139, 0.15)';
       ctx.moveTo(x, padTop);
       ctx.lineTo(x, padTop + plotH);
       ctx.stroke();
 
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
-      ctx.fillText(`${sVal > 0 ? `+${sVal}` : sVal}`, x, padTop + plotH + 7);
+      ctx.fillText(`${sVal > 0 ? `+${sVal}` : sVal}`, x, padTop + plotH + 5);
     });
 
-    // Axis title
     ctx.textAlign = 'center';
     ctx.fillStyle = isDark ? '#94A3B8' : '#475569';
     ctx.fillText(
       params.beamMode === 'parallel'
         ? 'Detector Position s (mm)'
-        : 'Fan-Beam Detector Coordinate s (mm)',
+        : 'Fan Detector s (mm)',
       padLeft + plotW / 2,
-      height - 14
+      height - 12
     );
 
-    // 3. Optional Thin-Slice (0.5mm) Baseline Reference Curve (shows partial volume contrast loss)
+    // 3. Thin-Slice (0.5mm) Baseline Reference Curve
     if (showThinSliceRef && params.sliceThicknessMm > 1.0 && rays.length > 0) {
       ctx.save();
       ctx.strokeStyle = isDark ? 'rgba(148, 163, 184, 0.55)' : 'rgba(100, 116, 139, 0.6)';
@@ -152,7 +172,7 @@ export const CurrentProjectionWindow: React.FC<CurrentProjectionWindowProps> = (
       ctx.restore();
     }
 
-    // 4. Optional Selected Primitive Individual Contribution Curve
+    // 4. Selected Primitive Individual Contribution Curve
     if (
       showSelectedComponent &&
       selectedPrim &&
@@ -175,7 +195,7 @@ export const CurrentProjectionWindow: React.FC<CurrentProjectionWindowProps> = (
       ctx.restore();
     }
 
-    // 5. Primary Total Attenuation Line Integral Profile p_theta(s)
+    // 5. Primary Total Attenuation Profile p_theta(s)
     if (rays.length > 0) {
       const grad = ctx.createLinearGradient(0, padTop, 0, padTop + plotH);
       grad.addColorStop(0, 'rgba(6, 182, 212, 0.34)');
@@ -229,6 +249,7 @@ export const CurrentProjectionWindow: React.FC<CurrentProjectionWindowProps> = (
       }
     }
   }, [
+    canvasSize,
     params,
     currentProjection,
     primitives,
@@ -247,97 +268,90 @@ export const CurrentProjectionWindow: React.FC<CurrentProjectionWindowProps> = (
       : null;
 
   return (
-    <section className="flex flex-col bg-white dark:bg-[#111827] border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
+    <section className="flex flex-col h-full min-h-0 bg-white dark:bg-[#111827] border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
       {/* Window Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 dark:border-slate-800">
-        <div>
-          <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 font-mono">
+      <div className="flex items-center justify-between gap-2 px-3.5 py-2 border-b border-slate-200 dark:border-slate-800 shrink-0">
+        <div className="min-w-0">
+          <div className="flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400 font-mono">
             <span>WINDOW 02</span>
             <span aria-hidden="true">·</span>
-            <span>1D DETECTOR PROFILE pθ(s)</span>
+            <span className="truncate">1D PROFILE pθ(s)</span>
           </div>
-          <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+          <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
             Current Projection (θ = {params.currentAngleDeg.toFixed(0)}°)
           </h2>
         </div>
 
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1 shrink-0">
           <button
             type="button"
             onClick={() => setShowThinSliceRef((v) => !v)}
-            className={`inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-lg border transition-colors whitespace-nowrap shrink-0 ${
+            className={`inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded-lg border transition-colors whitespace-nowrap shrink-0 ${
               showThinSliceRef
                 ? 'bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border-cyan-500/30'
                 : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'
             }`}
             title="Compare current slice thickness against 0.5mm thin-slice reference"
           >
-            <Layers className="w-3.5 h-3.5" />
+            <Layers className="w-3 h-3" />
             <span>0.5mm Ref</span>
           </button>
           <button
             type="button"
             onClick={() => setShowSelectedComponent((v) => !v)}
-            className={`inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-lg border transition-colors whitespace-nowrap shrink-0 ${
+            className={`inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded-lg border transition-colors whitespace-nowrap shrink-0 ${
               showSelectedComponent
                 ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30'
                 : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'
             }`}
             title="Show isolated attenuation contribution of selected object"
           >
-            <Activity className="w-3.5 h-3.5" />
-            <span>Object Split</span>
+            <Activity className="w-3 h-3" />
+            <span>Split</span>
           </button>
         </div>
       </div>
 
       {/* Main 1D Waveform Canvas */}
-      <div className="relative flex-1 min-h-[310px] w-full select-none">
+      <div ref={containerRef} className="relative flex-1 min-h-0 w-full select-none overflow-hidden">
         <canvas
           ref={canvasRef}
           onPointerMove={handlePointerMove}
           onPointerLeave={() => onProbeBin(null)}
-          className="w-full h-full min-h-[310px] cursor-crosshair block"
+          className="absolute inset-0 w-full h-full cursor-crosshair block"
         />
 
         {/* Legend & Live Integral Readout */}
-        <div className="pointer-events-none absolute top-3 right-3 flex flex-col items-end gap-1 bg-white/85 dark:bg-[#0B0F19]/85 backdrop-blur-xs px-2.5 py-1.5 rounded-md border border-slate-200/80 dark:border-slate-800/80 text-[11px] font-mono">
-          <div className="flex items-center gap-3">
+        <div className="pointer-events-none absolute top-2 right-2 flex flex-col items-end gap-0.5 bg-white/85 dark:bg-[#0B0F19]/85 backdrop-blur-xs px-2 py-1 rounded-md border border-slate-200/80 dark:border-slate-800/80 text-[10px] font-mono">
+          <div className="flex items-center gap-2">
             <span className="text-cyan-600 dark:text-cyan-400 font-semibold">
               Peak ∫μdl: {currentProjection.maxAttenuation.toFixed(2)}
             </span>
             <span className="text-slate-400">·</span>
             <span className="text-slate-600 dark:text-slate-300">
-              Bins: {params.detectorBins}
+              {params.detectorBins} bins
             </span>
           </div>
           {activeBinRay ? (
             <div className="text-amber-600 dark:text-amber-400">
-              Bin #{activeBinRay.binIndex} (s = {activeBinRay.sMm.toFixed(1)} mm) → p ={' '}
-              {activeBinRay.attenuation.toFixed(3)}
+              s={activeBinRay.sMm.toFixed(0)}mm → p={activeBinRay.attenuation.toFixed(3)}
             </div>
           ) : (
             <div className="text-slate-500 dark:text-slate-400">
-              Hover waveform to trace single ray path
+              Hover curve to trace ray
             </div>
           )}
         </div>
       </div>
 
       {/* Footer Mathematical Summary */}
-      <div className="border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-[#080C14] px-4 py-2.5 flex items-center justify-between text-xs">
-        <div className="flex items-center gap-3 text-slate-600 dark:text-slate-400">
-          <span className="font-mono text-cyan-600 dark:text-cyan-400 font-medium">
-            pθ(s) = -ln(I / I₀) = ∫ μ(x,y,z) dℓ
-          </span>
-          <span aria-hidden="true">·</span>
-          <span className="truncate">
-             maps directly to Row θ = {params.currentAngleDeg.toFixed(0)}° in Sinogram
-          </span>
-        </div>
+      <div className="border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-[#080C14] px-3.5 py-2 flex items-center justify-between gap-2 text-[11px] shrink-0">
+        <span className="font-mono text-cyan-600 dark:text-cyan-400 font-medium truncate">
+          pθ(s) = -ln(I/I₀) = ∫ μ dℓ → Row {params.currentAngleDeg.toFixed(0)}°
+        </span>
         {selectedPrim && showSelectedComponent && (
-          <span className="font-mono text-[11px] text-amber-600 dark:text-amber-400 shrink-0">
-            Amber: {selectedPrim.label}
+          <span className="font-mono text-[10px] text-amber-600 dark:text-amber-400 truncate max-w-[140px] shrink-0">
+            {selectedPrim.label}
           </span>
         )}
       </div>
