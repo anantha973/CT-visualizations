@@ -57,8 +57,10 @@ export const SinogramWindow: React.FC<SinogramWindowProps> = ({
     const observer = new ResizeObserver((entries) => {
       for (const entry of entries) {
         const { width, height } = entry.contentRect;
-        if (width > 0 && height > 0) {
-          setCanvasSize({ w: Math.floor(width), h: Math.floor(height) });
+        const w = Math.floor(width);
+        const h = Math.floor(height);
+        if (w > 0 && h > 0) {
+          setCanvasSize((prev) => (prev.w === w && prev.h === h ? prev : { w, h }));
         }
       }
     });
@@ -69,8 +71,8 @@ export const SinogramWindow: React.FC<SinogramWindowProps> = ({
   const getPlotMetrics = (width: number, height: number) => {
     const padLeft = 42;
     const padRight = 16;
-    const padTop = 22;
-    const padBottom = 34;
+    const padTop = 14;
+    const padBottom = 28;
     const plotW = Math.max(10, width - padLeft - padRight);
     const plotH = Math.max(10, height - padTop - padBottom);
     return { padLeft, padRight, padTop, padBottom, plotW, plotH };
@@ -329,18 +331,19 @@ export const SinogramWindow: React.FC<SinogramWindowProps> = ({
     : '0';
 
   return (
-    <section className="flex flex-col h-full min-h-0 bg-white dark:bg-[#111827] border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
+    <section className="flex flex-col h-full w-full min-h-0 bg-white dark:bg-[#111827] border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
       {/* Window Header */}
-      <div className="flex items-center justify-between gap-2 px-3.5 py-2 border-b border-slate-200 dark:border-slate-800 shrink-0">
-        <div className="min-w-0">
-          <div className="flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400 font-mono">
-            <span>WINDOW 03</span>
-            <span aria-hidden="true">·</span>
-            <span className="truncate">RADON R[μ](s, θ)</span>
-          </div>
-          <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
-            Sinogram (0° → {params.maxAngleDeg}°)
+      <div className="flex items-center justify-between gap-2 px-3.5 py-1.5 border-b border-slate-200 dark:border-slate-800 shrink-0">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400 shrink-0">
+            WINDOW 03 ·
+          </span>
+          <h2 className="text-xs sm:text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
+            Sinogram Matrix R[μ](s, θ)
           </h2>
+          <span className="text-[11px] font-mono text-cyan-600 dark:text-cyan-400 shrink-0">
+            (0° → {params.maxAngleDeg}°)
+          </span>
         </div>
 
         <div className="flex items-center gap-1 shrink-0">
@@ -421,7 +424,7 @@ export const SinogramWindow: React.FC<SinogramWindowProps> = ({
       </div>
 
       {/* Footer Sinusoid Trajectory Formula */}
-      <div className="border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-[#080C14] px-3.5 py-2 flex items-center justify-between gap-2 text-[11px] shrink-0">
+      <div className="border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-[#080C14] px-3.5 py-1.5 flex items-center justify-between gap-2 text-[11px] shrink-0">
         {selectedPrim ? (
           <div className="flex items-center gap-1.5 font-mono text-[10px] text-slate-600 dark:text-slate-300 truncate">
             <span className="text-amber-600 dark:text-amber-400 font-semibold truncate">

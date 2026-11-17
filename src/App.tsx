@@ -651,10 +651,10 @@ export default function App() {
           </div>
         </section>
 
-        {/* Three Synchronized Tomography Inspection Windows — locked to single-screen height on desktop */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5 md:h-[clamp(350px,calc(100vh-215px),540px)]">
-          {/* Window 1: Object & Projection Geometry */}
-          <div className="h-[360px] md:h-full min-h-0">
+        {/* Three Synchronized Tomography Inspection Windows — Asymmetric Fixed-Viewport Layout */}
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-3.5 md:h-[calc(100vh-190px)] md:min-h-[460px] md:max-h-[680px] min-h-0 overflow-hidden">
+          {/* Left Column: Window 1 (Object & Projection Geometry) */}
+          <div className="md:col-span-5 h-[360px] md:h-full min-h-0 overflow-hidden">
             <ObjectGeometryWindow
               primitives={primitives}
               params={params}
@@ -669,43 +669,46 @@ export default function App() {
             />
           </div>
 
-          {/* Window 2: Current Projection Profile */}
-          <div className="h-[360px] md:h-full min-h-0">
-            <CurrentProjectionWindow
-              params={params}
-              currentProjection={currentProjection}
-              primitives={primitives}
-              selectedPrimitiveId={selectedPrimitiveId}
-              probedPoint={probedPoint}
-              onProbeBin={handleProbeBinFromWindow2}
-              globalMaxAttenuation={fullSinogram.globalMax}
-              isDark={isDark}
-            />
-          </div>
+          {/* Right Column: Window 2 (Current Projection) stacked above Window 3 (Sinogram) */}
+          <div className="md:col-span-7 grid grid-rows-2 gap-3.5 md:h-full min-h-0 overflow-hidden">
+            {/* Top Right: Window 2 — Current Projection Profile */}
+            <div className="h-[240px] md:h-full min-h-0 overflow-hidden">
+              <CurrentProjectionWindow
+                params={params}
+                currentProjection={currentProjection}
+                primitives={primitives}
+                selectedPrimitiveId={selectedPrimitiveId}
+                probedPoint={probedPoint}
+                onProbeBin={handleProbeBinFromWindow2}
+                globalMaxAttenuation={fullSinogram.globalMax}
+                isDark={isDark}
+              />
+            </div>
 
-          {/* Window 3: 2D Sinogram Matrix */}
-          <div className="h-[360px] md:h-full min-h-0">
-            <SinogramWindow
-              params={params}
-              sinogram={fullSinogram}
-              primitives={primitives}
-              selectedPrimitiveId={selectedPrimitiveId}
-              maxAcquiredAngleDeg={maxAcquiredAngleDeg}
-              showFullGhostSinogram={showFullGhostSinogram}
-              onToggleGhostSinogram={() => setShowFullGhostSinogram((v) => !v)}
-              showSinusoidLocus={showSinusoidLocus}
-              onToggleSinusoidLocus={() => setShowSinusoidLocus((v) => !v)}
-              colormap={colormap}
-              onChangeColormap={setColormap}
-              probedPoint={probedPoint}
-              onProbePoint={setProbedPoint}
-              onSelectAngle={(angleDeg) => {
-                setIsPlaying(false);
-                setParams((prev) => ({ ...prev, currentAngleDeg: angleDeg }));
-                setMaxAcquiredAngleDeg((prevMax) => Math.max(prevMax, angleDeg));
-              }}
-              isDark={isDark}
-            />
+            {/* Bottom Right: Window 3 — 2D Sinogram Matrix */}
+            <div className="h-[260px] md:h-full min-h-0 overflow-hidden">
+              <SinogramWindow
+                params={params}
+                sinogram={fullSinogram}
+                primitives={primitives}
+                selectedPrimitiveId={selectedPrimitiveId}
+                maxAcquiredAngleDeg={maxAcquiredAngleDeg}
+                showFullGhostSinogram={showFullGhostSinogram}
+                onToggleGhostSinogram={() => setShowFullGhostSinogram((v) => !v)}
+                showSinusoidLocus={showSinusoidLocus}
+                onToggleSinusoidLocus={() => setShowSinusoidLocus((v) => !v)}
+                colormap={colormap}
+                onChangeColormap={setColormap}
+                probedPoint={probedPoint}
+                onProbePoint={setProbedPoint}
+                onSelectAngle={(angleDeg) => {
+                  setIsPlaying(false);
+                  setParams((prev) => ({ ...prev, currentAngleDeg: angleDeg }));
+                  setMaxAcquiredAngleDeg((prevMax) => Math.max(prevMax, angleDeg));
+                }}
+                isDark={isDark}
+              />
+            </div>
           </div>
         </div>
 

@@ -43,8 +43,10 @@ export const CurrentProjectionWindow: React.FC<CurrentProjectionWindowProps> = (
     const observer = new ResizeObserver((entries) => {
       for (const entry of entries) {
         const { width, height } = entry.contentRect;
-        if (width > 0 && height > 0) {
-          setCanvasSize({ w: Math.floor(width), h: Math.floor(height) });
+        const w = Math.floor(width);
+        const h = Math.floor(height);
+        if (w > 0 && h > 0) {
+          setCanvasSize((prev) => (prev.w === w && prev.h === h ? prev : { w, h }));
         }
       }
     });
@@ -86,8 +88,8 @@ export const CurrentProjectionWindow: React.FC<CurrentProjectionWindowProps> = (
 
     const padLeft = 42;
     const padRight = 16;
-    const padTop = 22;
-    const padBottom = 34;
+    const padTop = 14;
+    const padBottom = 28;
     const plotW = Math.max(10, width - padLeft - padRight);
     const plotH = Math.max(10, height - padTop - padBottom);
 
@@ -268,18 +270,19 @@ export const CurrentProjectionWindow: React.FC<CurrentProjectionWindowProps> = (
       : null;
 
   return (
-    <section className="flex flex-col h-full min-h-0 bg-white dark:bg-[#111827] border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
+    <section className="flex flex-col h-full w-full min-h-0 bg-white dark:bg-[#111827] border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
       {/* Window Header */}
-      <div className="flex items-center justify-between gap-2 px-3.5 py-2 border-b border-slate-200 dark:border-slate-800 shrink-0">
-        <div className="min-w-0">
-          <div className="flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400 font-mono">
-            <span>WINDOW 02</span>
-            <span aria-hidden="true">·</span>
-            <span className="truncate">1D PROFILE pθ(s)</span>
-          </div>
-          <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
-            Current Projection (θ = {params.currentAngleDeg.toFixed(0)}°)
+      <div className="flex items-center justify-between gap-2 px-3.5 py-1.5 border-b border-slate-200 dark:border-slate-800 shrink-0">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400 shrink-0">
+            WINDOW 02 ·
+          </span>
+          <h2 className="text-xs sm:text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
+            Current Projection Profile pθ(s)
           </h2>
+          <span className="text-[11px] font-mono text-cyan-600 dark:text-cyan-400 tabular-nums shrink-0">
+            (θ = {params.currentAngleDeg.toFixed(0)}°)
+          </span>
         </div>
 
         <div className="flex items-center gap-1 shrink-0">
@@ -345,13 +348,13 @@ export const CurrentProjectionWindow: React.FC<CurrentProjectionWindowProps> = (
       </div>
 
       {/* Footer Mathematical Summary */}
-      <div className="border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-[#080C14] px-3.5 py-2 flex items-center justify-between gap-2 text-[11px] shrink-0">
+      <div className="border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-[#080C14] px-3.5 py-1.5 flex items-center justify-between gap-2 text-[11px] shrink-0">
         <span className="font-mono text-cyan-600 dark:text-cyan-400 font-medium truncate">
-          pθ(s) = -ln(I/I₀) = ∫ μ dℓ → Row {params.currentAngleDeg.toFixed(0)}°
+          pθ(s) = -ln(I/I₀) = ∫ μ dℓ → Sinogram Row θ = {params.currentAngleDeg.toFixed(0)}°
         </span>
         {selectedPrim && showSelectedComponent && (
-          <span className="font-mono text-[10px] text-amber-600 dark:text-amber-400 truncate max-w-[140px] shrink-0">
-            {selectedPrim.label}
+          <span className="font-mono text-[10px] text-amber-600 dark:text-amber-400 truncate max-w-[180px] shrink-0">
+            Amber: {selectedPrim.label}
           </span>
         )}
       </div>

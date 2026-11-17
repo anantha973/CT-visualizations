@@ -58,10 +58,12 @@ export const ObjectGeometryWindow: React.FC<ObjectGeometryWindowProps> = ({
     const observer = new ResizeObserver((entries) => {
       for (const entry of entries) {
         const { width, height } = entry.contentRect;
-        if (entry.target === mainEl && width > 0 && height > 0) {
-          setCanvasSize({ w: Math.floor(width), h: Math.floor(height) });
-        } else if (entry.target === zEl && width > 0 && height > 0) {
-          setZSlabSize({ w: Math.floor(width), h: Math.floor(height) });
+        const w = Math.floor(width);
+        const h = Math.floor(height);
+        if (entry.target === mainEl && w > 0 && h > 0) {
+          setCanvasSize((prev) => (prev.w === w && prev.h === h ? prev : { w, h }));
+        } else if (entry.target === zEl && w > 0 && h > 0) {
+          setZSlabSize((prev) => (prev.w === w && prev.h === h ? prev : { w, h }));
         }
       }
     });
@@ -473,7 +475,7 @@ export const ObjectGeometryWindow: React.FC<ObjectGeometryWindowProps> = ({
     : null;
 
   return (
-    <section className="flex flex-col h-full min-h-0 bg-white dark:bg-[#111827] border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
+    <section className="flex flex-col h-full w-full min-h-0 bg-white dark:bg-[#111827] border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
       {/* Window Header */}
       <div className="flex items-center justify-between px-3.5 py-2 border-b border-slate-200 dark:border-slate-800 shrink-0">
         <div className="min-w-0">
